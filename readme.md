@@ -58,7 +58,7 @@ RegexLab is a compiler-design semester project: take a regex pattern as a raw st
 |---|---|---|---|
 | `ParserPass` | Recursive-descent parsing | `string` → `AST` \| `ParseError` | ✅ Complete — 15/15 golden tests passing |
 | `ThompsonPass` | Thompson's construction | `AST` → `NFA` | ✅ Complete — 5/5 golden tests passing |
-| `SubsetConstructionPass` | Subset construction (Rabin–Scott) | `NFA` → `DFA` | 📋 Not started |
+| `SubsetConstructionPass` | Subset construction (Rabin–Scott) | `NFA` → `DFA` | ✅ Complete — 5/5 golden tests passing |
 | `MinimizationPass` | Moore's minimization | `DFA` → `Min-DFA` | 📋 Not started |
 | `MatcherPass` | DFA-driven matching | `Min-DFA`, `string` → `MatchTrace` | 📋 Not started |
 
@@ -73,14 +73,15 @@ regexlab/
 │   ├── passes/
 │   │   ├── parser-pass.ts          # ✅ done
 │   │   ├── thompson-pass.ts        # ✅ done
-│   │   ├── subset-construction-pass.ts   # 📋 planned
+│   │   ├── subset-construction-pass.ts   # ✅ done
 │   │   ├── minimization-pass.ts    # 📋 planned
 │   │   └── matcher-pass.ts         # 📋 planned
 │   ├── pipeline.ts                 # 📋 planned — wires all passes together
 │   └── __tests__/
 │       ├── unit/                   # ✅ golden-value tests, one file per pass
 │       │   ├── parser-pass.test.ts
-│       │   └── thompson-pass.test.ts
+│       │   ├── thompson-pass.test.ts
+│       │   └── subset-construction-pass.test.ts
 │       └── differential/           # 📋 planned — property-based oracle tests
 ├── frontend/                       # 📋 planned — React + Vite
 │   └── src/components/             # PatternInput, AutomatonView, PlaybackControls, SuggestionBanner
@@ -165,7 +166,7 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 | Language/track decision | ✅ Resolved — TypeScript (Track A) | — |
 | `ParserPass` + grammar | ✅ Complete, 15/15 golden tests | Yes — merged via reviewed PR |
 | `ThompsonPass` | ✅ Complete, 5/5 golden tests | Pending explain-it-back checkpoint |
-| `SubsetConstructionPass` | 📋 Not started | — |
+| `SubsetConstructionPass` | ✅ Complete, 5/5 golden tests | Pending explain-it-back checkpoint |
 | `MinimizationPass` (Moore's) | 📋 Not started | — |
 | `MatcherPass` | 📋 Not started | — |
 | Differential testing | 📋 Not started | — |
