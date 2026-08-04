@@ -1,0 +1,15 @@
+{
+  "name": "regexlab-engine",
+  "version": "0.1.0",
+  "description": "Core engine for RegexLab: a hand-built regex -> NFA -> DFA -> min-DFA pass pipeline. Zero regex-library dependencies (see CLAUDE.md Design Philosophy #1).",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
