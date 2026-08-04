@@ -57,7 +57,7 @@ RegexLab is a compiler-design semester project: take a regex pattern as a raw st
 | Stage | Named Algorithm | Input → Output | Status |
 |---|---|---|---|
 | `ParserPass` | Recursive-descent parsing | `string` → `AST` \| `ParseError` | ✅ Complete — 15/15 golden tests passing |
-| `ThompsonPass` | Thompson's construction | `AST` → `NFA` | 📋 Not started |
+| `ThompsonPass` | Thompson's construction | `AST` → `NFA` | ✅ Complete — 5/5 golden tests passing |
 | `SubsetConstructionPass` | Subset construction (Rabin–Scott) | `NFA` → `DFA` | 📋 Not started |
 | `MinimizationPass` | Moore's minimization | `DFA` → `Min-DFA` | 📋 Not started |
 | `MatcherPass` | DFA-driven matching | `Min-DFA`, `string` → `MatchTrace` | 📋 Not started |
@@ -72,14 +72,15 @@ regexlab/
 │   ├── types.ts                    # ✅ shared data contracts: AST, ParseError, Automaton, MatchTrace
 │   ├── passes/
 │   │   ├── parser-pass.ts          # ✅ done
-│   │   ├── thompson-pass.ts        # 📋 planned
+│   │   ├── thompson-pass.ts        # ✅ done
 │   │   ├── subset-construction-pass.ts   # 📋 planned
 │   │   ├── minimization-pass.ts    # 📋 planned
 │   │   └── matcher-pass.ts         # 📋 planned
 │   ├── pipeline.ts                 # 📋 planned — wires all passes together
 │   └── __tests__/
 │       ├── unit/                   # ✅ golden-value tests, one file per pass
-│       │   └── parser-pass.test.ts
+│       │   ├── parser-pass.test.ts
+│       │   └── thompson-pass.test.ts
 │       └── differential/           # 📋 planned — property-based oracle tests
 ├── frontend/                       # 📋 planned — React + Vite
 │   └── src/components/             # PatternInput, AutomatonView, PlaybackControls, SuggestionBanner
@@ -162,8 +163,8 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 | Component | Status | Both teammates can explain it? |
 |---|---|---|
 | Language/track decision | ✅ Resolved — TypeScript (Track A) | — |
-| `ParserPass` + grammar | ✅ Complete, 15/15 golden tests | Pending explain-it-back checkpoint |
-| `ThompsonPass` | 📋 Not started | — |
+| `ParserPass` + grammar | ✅ Complete, 15/15 golden tests | Yes — merged via reviewed PR |
+| `ThompsonPass` | ✅ Complete, 5/5 golden tests | Pending explain-it-back checkpoint |
 | `SubsetConstructionPass` | 📋 Not started | — |
 | `MinimizationPass` (Moore's) | 📋 Not started | — |
 | `MatcherPass` | 📋 Not started | — |
