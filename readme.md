@@ -240,5 +240,5 @@ Built with extensive AI assistance (Claude) as a pair-programmer and tutor — n
 
 ## Contact
 
-**Vignesh P C** — [GitHub](https://github.com/ujwal2311) · [LinkedIn](need to fill value)
-**CVS Ujwal** — [GitHub](https://github.com/Vignesh-P-C) · [LinkedIn](https://www.linkedin.com/in/vignesh-p-c/)
+**Vignesh P C** — [GitHub](https://github.com/Vignesh-P-C) · [LinkedIn](https://www.linkedin.com/in/vignesh-p-c/)
+**CVS Ujwal** — [GitHub](https://github.com/ujwal2311) · [LinkedIn](Need to fill value)
