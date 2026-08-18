@@ -6,3 +6,9 @@ build/
 .env
 .env.local
 .vercel
+
+# C++ build artifacts (Track B)
+build/
+*.o
+*.obj
+compile_commands.json
