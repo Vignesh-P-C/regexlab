@@ -135,4 +135,52 @@ struct Pass {
     virtual Out run(const In& input) = 0;
 };
 
+// ============================================================
+// Equality operators — for golden-value testing only.
+// TypeScript's `toEqual` performs structural equality automatically;
+// C++ has no built-in equivalent, so these are defined explicitly,
+// purely so the test suite can assert "does this AST/Automaton/etc.
+// match the exact expected shape" the same way the TS golden tests do.
+// Nothing in the actual passes depends on these.
+// ============================================================
+
+inline bool operator==(const CharNode& a, const CharNode& b) {
+    return a.value == b.value;
+}
+
+bool operator==(const ASTNode& a, const ASTNode& b);  // fwd decl — used recursively below
+
+inline bool operator==(const ConcatNode& a, const ConcatNode& b) {
+    return *a.left == *b.left && *a.right == *b.right;
+}
+inline bool operator==(const AltNode& a, const AltNode& b) {
+    return *a.left == *b.left && *a.right == *b.right;
+}
+inline bool operator==(const StarNode& a, const StarNode& b) {
+    return *a.child == *b.child;
+}
+
+inline bool operator==(const ASTNode& a, const ASTNode& b) {
+    return a.node == b.node;
+}
+
+inline bool operator==(const ParseError& a, const ParseError& b) {
+    return a.type == b.type && a.position == b.position &&
+           a.expected == b.expected && a.found == b.found;
+}
+
+inline bool operator==(const ParseResult& a, const ParseResult& b) {
+    if (a.ok != b.ok) return false;
+    if (a.ok) return *a.ast == *b.ast;
+    return a.error == b.error;
+}
+
+inline bool operator==(const MatchStep& a, const MatchStep& b) {
+    return a.ch == b.ch && a.activeStates == b.activeStates;
+}
+
+inline bool operator==(const MatchTrace& a, const MatchTrace& b) {
+    return a.steps == b.steps && a.result == b.result && a.failurePosition == b.failurePosition;
+}
+
 }  // namespace regexlab

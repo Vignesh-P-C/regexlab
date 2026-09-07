@@ -1,11 +1,8 @@
 // tests/smoke_test.cpp
 //
-// This test doesn't validate any algorithm — there are no passes yet.
-// Its only job is to prove the build pipeline itself works end to end:
-// CMake -> FetchContent (Catch2, nlohmann/json) -> the ported §7 data
-// contracts in types.hpp -> a running test binary.
-//
-// Once this passes, ParserPass is the next real piece of work.
+// Proves the build pipeline itself works end to end: CMake -> FetchContent
+// (Catch2, nlohmann/json) -> the ported §7 data contracts in types.hpp ->
+// a running test binary. Not testing any algorithm.
 
 #include <catch2/catch_test_macros.hpp>
 
