@@ -56,6 +56,7 @@ add_executable(engine_tests
     tests/minimization_pass_test.cpp
     tests/matcher_pass_test.cpp
     tests/pipeline_test.cpp
+    tests/differential_test.cpp
 )
 target_link_libraries(engine_tests PRIVATE regexlab_engine Catch2::Catch2WithMain)
 
