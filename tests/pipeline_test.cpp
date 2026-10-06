@@ -59,6 +59,20 @@ TEST_CASE("Pipeline — output is identical to manually chaining all 5 passes", 
         MatchTrace viaManualChain = match(minDfa, c.input);
 
         REQUIRE(viaPipeline.ok);
+        REQUIRE(*viaPipeline.ast == *parsed.ast);
+        REQUIRE(viaPipeline.nfa == nfa);
+        REQUIRE(viaPipeline.dfa == dfa);
+        REQUIRE(viaPipeline.minDfa == minDfa);
         REQUIRE(viaPipeline.trace == viaManualChain);
     }
+}
+
+TEST_CASE("Pipeline — parse failure still returns well-formed (empty) stage fields",
+          "[pipeline]") {
+    PipelineResult result = runPipeline("(a", "a");
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.ast == nullptr);
+    REQUIRE(result.nfa.stateCount == 0);
+    REQUIRE(result.dfa.stateCount == 0);
+    REQUIRE(result.minDfa.stateCount == 0);
 }

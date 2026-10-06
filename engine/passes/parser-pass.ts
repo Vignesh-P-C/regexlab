@@ -39,7 +39,13 @@ class ParseFailure extends Error {
 }
 
 class Parser {
+  // Bounds group-nesting depth so a pathological pattern (thousands of '('
+  // in a row) fails as a normal ParseError instead of blowing the call
+  // stack. Mirrors the same guard in parser-pass.cpp.
+  private static readonly MAX_NESTING_DEPTH = 1000;
+
   private pos = 0;
+  private depth = 0;
 
   constructor(private readonly pattern: string) {}
 
@@ -117,7 +123,16 @@ class Parser {
         });
       }
 
+      if (++this.depth > Parser.MAX_NESTING_DEPTH) {
+        throw new ParseFailure({
+          type: "PatternTooComplex",
+          position: openParenPos,
+          expected: `nesting depth <= ${Parser.MAX_NESTING_DEPTH}`,
+          found: "deeper group nesting",
+        });
+      }
       const inner = this.parseRegex();
+      this.depth--;
 
       if (this.peek() !== ")") {
         throw new ParseFailure({

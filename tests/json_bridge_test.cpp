@@ -65,3 +65,32 @@ TEST_CASE("json_bridge — empty match produces an empty steps array, not null",
     REQUIRE(j["trace"]["steps"].is_array());
     REQUIRE(j["trace"]["steps"].empty());
 }
+
+TEST_CASE("json_bridge — success carries every pipeline stage, not just the trace",
+          "[json_bridge]") {
+    std::string raw = runPipelineJson("a|b", "a");
+    json j = json::parse(raw);
+
+    REQUIRE(j["ok"].get<bool>() == true);
+    REQUIRE(j["ast"]["kind"].get<std::string>() == "alt");
+    REQUIRE(j["ast"]["left"]["value"].get<std::string>() == "a");
+    REQUIRE(j["ast"]["right"]["value"].get<std::string>() == "b");
+    REQUIRE(j["nfa"]["stateCount"].get<int>() == 6);
+    REQUIRE(j["dfa"]["stateCount"].get<int>() > 0);
+    REQUIRE(j["minDfa"]["stateCount"].get<int>() > 0);
+    REQUIRE(j["minDfa"]["stateCount"].get<int>() < j["nfa"]["stateCount"].get<int>());
+    REQUIRE(j["trace"]["result"].get<std::string>() == "match");
+}
+
+TEST_CASE("json_bridge — pattern nested past the depth guard reports PatternTooComplex",
+          "[json_bridge]") {
+    std::string pathological(1500, '(');
+    pathological += "a";
+    pathological += std::string(1500, ')');
+
+    std::string raw = runPipelineJson(pathological, "a");
+    json j = json::parse(raw);
+
+    REQUIRE(j["ok"].get<bool>() == false);
+    REQUIRE(j["error"]["type"].get<std::string>() == "PatternTooComplex");
+}

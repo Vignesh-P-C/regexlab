@@ -97,3 +97,22 @@ TEST_CASE("ParserPass — malformed patterns (golden ParseError shapes)", "[pars
                                      std::string("a character after '\\'"), std::string("end of input")));
     }
 }
+
+TEST_CASE("ParserPass — nesting depth guard", "[parser]") {
+    SECTION("nesting well under the limit still parses normally") {
+        std::string pattern(500, '(');
+        pattern += "a";
+        pattern += std::string(500, ')');
+        ParseResult result = parse(pattern);
+        REQUIRE(result.ok);
+    }
+
+    SECTION("nesting past the limit fails gracefully instead of crashing") {
+        std::string pattern(1500, '(');
+        pattern += "a";
+        pattern += std::string(1500, ')');
+        ParseResult result = parse(pattern);
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.type == ParseErrorType::PatternTooComplex);
+    }
+}

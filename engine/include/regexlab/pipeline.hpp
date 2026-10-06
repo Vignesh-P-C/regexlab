@@ -20,8 +20,16 @@ namespace regexlab {
 
 struct PipelineResult {
     bool ok;
-    MatchTrace trace;    // meaningful iff ok == true
-    ParseError error;    // meaningful iff ok == false — propagated straight from ParserPass
+    // The following four are meaningful iff ok == true. Each is a snapshot
+    // from one pass in the pipeline, carried through specifically so the
+    // frontend visualizer can render every intermediate structure — not
+    // just the final match — without re-running the engine per stage.
+    ASTNodePtr ast;       // from ParserPass
+    Automaton nfa;        // from ThompsonPass
+    Automaton dfa;        // from SubsetConstructionPass, pre-minimization
+    Automaton minDfa;     // from MinimizationPass — trace below runs over this
+    MatchTrace trace;     // from MatcherPass
+    ParseError error;     // meaningful iff ok == false — propagated straight from ParserPass
 };
 
 /**
@@ -37,7 +45,10 @@ PipelineResult runPipeline(const std::string& pattern, const std::string& input)
 // equivalent to TS's toEqual).
 inline bool operator==(const PipelineResult& a, const PipelineResult& b) {
     if (a.ok != b.ok) return false;
-    if (a.ok) return a.trace == b.trace;
+    if (a.ok) {
+        return *a.ast == *b.ast && a.nfa == b.nfa && a.dfa == b.dfa && a.minDfa == b.minDfa &&
+               a.trace == b.trace;
+    }
     return a.error == b.error;
 }
 

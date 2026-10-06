@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Applies only to our own targets (added per-target below), never to
+# FetchContent'd third-party code (Catch2, nlohmann/json).
+set(REGEXLAB_WARNING_FLAGS -Wall -Wextra)
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -36,6 +40,7 @@ target_include_directories(regexlab_engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/engine/include
 )
 target_link_libraries(regexlab_engine PUBLIC nlohmann_json::nlohmann_json)
+target_compile_options(regexlab_engine PRIVATE ${REGEXLAB_WARNING_FLAGS})
 
 if(EMSCRIPTEN)
     target_compile_options(regexlab_engine PRIVATE -fexceptions)
@@ -54,6 +59,7 @@ add_executable(engine_tests
     tests/json_bridge_test.cpp
 )
 target_link_libraries(engine_tests PRIVATE regexlab_engine Catch2::Catch2WithMain)
+target_compile_options(engine_tests PRIVATE ${REGEXLAB_WARNING_FLAGS})
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
@@ -63,7 +69,7 @@ catch_discover_tests(engine_tests)
 if(EMSCRIPTEN)
     add_executable(regexlab_wasm engine/wasm/bindings.cpp)
     target_link_libraries(regexlab_wasm PRIVATE regexlab_engine)
-    target_compile_options(regexlab_wasm PRIVATE -fexceptions)
+    target_compile_options(regexlab_wasm PRIVATE -fexceptions ${REGEXLAB_WARNING_FLAGS})
     target_link_options(regexlab_wasm PRIVATE
         "-fexceptions"
         "-lembind"
