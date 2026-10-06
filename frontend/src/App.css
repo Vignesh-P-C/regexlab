@@ -1,0 +1,16 @@
+.app { max-width: 760px; margin: 0 auto; padding: 24px; font-family: system-ui, sans-serif; }
+.pattern-input { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.pattern-input label { display: flex; flex-direction: column; font-size: 13px; gap: 4px; }
+.pattern-input input { font-family: monospace; font-size: 15px; padding: 6px 8px; }
+.parse-error { width: 100%; color: #b91c1c; font-size: 13px; }
+.engine-error { color: #b91c1c; }
+.playback-controls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.stage-tabs button { margin-right: 4px; }
+.stage-tabs button.active { font-weight: bold; text-decoration: underline; }
+.step-scrubber { display: flex; align-items: center; gap: 8px; }
+.automaton-view { border: 1px solid #ddd; border-radius: 8px; }
+.automaton-svg, .ast-svg { width: 100%; height: auto; }
+.state { fill: white; stroke: #333; stroke-width: 1.5; }
+.state.active { fill: #fde68a; stroke: #b45309; stroke-width: 2.5; }
+.ast-node { fill: white; stroke: #333; }
+.suggestion-banner { background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 12px; border-radius: 6px; margin: 12px 0; }
