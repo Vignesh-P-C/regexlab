@@ -70,7 +70,7 @@ RegexLab is a compiler-design semester project: take a regex pattern as a raw st
 | `MatcherPass` | DFA-driven matching | `Min-DFA`, `string` → `MatchTrace` | ✅ 8/8 golden tests | ✅ Ported, all golden values match |
 | `pipeline` | Wires all 5 passes into one call | `string`, `string` → `MatchTrace` \| `ParseError` | 📋 Planned, not written | ✅ Complete — includes a test proving output is identical to manually chaining all 5 passes |
 
-**C++ engine: 169/169 assertions passing across 25 test cases** (5 passes + smoke test + pipeline, all ported from the TS golden values plus new pipeline-equivalence coverage). Built and verified with CMake + Catch2, zero compiler warnings.
+**C++ engine: 4444 assertions passing across 35 test cases** (5 passes + smoke test + pipeline + json_bridge + differential testing against `std::regex`, all ported from the TS golden values plus pipeline-equivalence and fuzz coverage). Built and verified with CMake + Catch2 under `-Wall -Wextra`, zero compiler warnings, clean under AddressSanitizer/UndefinedBehaviorSanitizer.
 
 Each pass has one job, one input type, one output type, and is independently unit-testable without the rest of the pipeline running. Same shapes are reused across passes (`Automaton` covers both the NFA and DFA stages) so a fresh pair of eyes can follow data through the whole system from one type file — and the same shapes are mirrored 1:1 between `types.ts` and `types.hpp`.
 
@@ -97,18 +97,20 @@ regexlab/
 │   │   ├── pipeline.hpp
 │   │   └── passes/*.hpp                      # one header per pass
 │   └── __tests__/
-│       ├── unit/                             # ✅ TS golden-value tests, one file per pass
-│       └── differential/                     # 📋 planned — property-based oracle tests
-├── tests/                                    # ✅ C++ Catch2 tests (ported golden values + pipeline test)
+│       └── unit/                             # ✅ TS golden-value tests, one file per pass
+│                                              # 📋 TS differential/oracle tests not yet started
+├── tests/                                    # ✅ C++ Catch2 tests (ported golden values + pipeline + differential)
 │   ├── smoke_test.cpp
 │   ├── parser_pass_test.cpp
 │   ├── thompson_pass_test.cpp
 │   ├── subset_construction_pass_test.cpp
 │   ├── minimization_pass_test.cpp
 │   ├── matcher_pass_test.cpp
-│   └── pipeline_test.cpp
-├── frontend/                                 # 📋 planned — React + Vite
-│   └── src/components/                       # PatternInput, AutomatonView, PlaybackControls, SuggestionBanner
+│   ├── pipeline_test.cpp
+│   ├── json_bridge_test.cpp
+│   └── differential_test.cpp
+├── frontend/                                 # 🔄 scaffolded — React + Vite
+│   └── src/components/                       # ✅ PatternInput, AutomatonView, PlaybackControls — SuggestionBanner stubbed, unwired
 ├── api/
 │   └── suggest.ts                            # 📋 planned — Vercel serverless function, holds the AI API key
 ├── CMakeLists.txt                            # ✅ C++ build config — FetchContent for Catch2 + nlohmann/json
@@ -140,7 +142,7 @@ ParserPass re-parses the AI's suggestion → only shown if it's accepted
 This is the single most interview-defensible detail in the whole system: the AI cannot put an invalid pattern in front of a user, because the hand-built parser has final say, every time, with no exception.
 
 **Differential testing as a first-class correctness story**
-Beyond hand-picked golden tests, the matcher's output is checked against a reference engine (JS's built-in `RegExp` / C++'s `std::regex`) on thousands of randomized inputs — used strictly as a test oracle, never a runtime dependency. This is a stronger correctness claim than "it passed our five examples."
+Beyond hand-picked golden tests, the matcher's output is checked against a reference engine (JS's built-in `RegExp` / C++'s `std::regex`) on thousands of randomized inputs — used strictly as a test oracle, never a runtime dependency. This is a stronger correctness claim than "it passed our five examples." Done on the C++ side; the TS-side equivalent is tracked as open work.
 
 ---
 
@@ -148,7 +150,7 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 
 1. **Golden-value unit tests, per pass, in both languages.** Feed a known pattern, assert the exact expected AST shape / NFA state count / DFA state count / minimized state count. Ported 1:1 from TS (Vitest) to C++ (Catch2) — same patterns, same expected values, in both.
 2. **Pipeline-equivalence testing (C++).** A dedicated test proves `runPipeline()`'s output is byte-identical to manually chaining all 5 passes yourself, across a spread of patterns — the actual justification for trusting the wired-together entry point.
-3. **Differential testing.** Compare the engine's match result against a reference regex engine on randomized inputs — the strongest correctness signal in the project, and cheap to set up. Not yet started.
+3. **Differential testing.** Compare the engine's match result against a reference regex engine on randomized inputs — the strongest correctness signal in the project. Complete on the C++ side (fuzzed against `std::regex`); TS-side equivalent not yet started.
 4. **Isomorphism-based equivalence testing** *(Hard Stretch, not Core)*. Two DFAs accept the same language iff their minimized forms are isomorphic — used to test algebraic identities like `a(b|c) ≡ ab|ac`.
 
 ## Complexity Analysis
@@ -170,9 +172,9 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 |---|---|---|
 | Core engine (production) | C++20, CMake, zero runtime dependencies | Compiles to WebAssembly for in-browser execution — no server, no round-trip; systems-language depth beyond a frontend-only project |
 | Core engine (prototype) | TypeScript, strict mode, zero dependencies | Fast dev loop for validating the algorithms before the C++ port; kept in the repo as the documented design-validation history |
-| Engine tests (C++) | Catch2 v3, fetched via CMake FetchContent | Golden-value tests ported from TS, plus pipeline-equivalence testing |
-| Engine tests (TS) | Vitest (unit) + fast-check (property-based, planned) | Fast golden-value tests per pass; property/differential testing against a reference oracle |
-| WASM bridge | Emscripten (planned) | Compiles the C++ engine to a `.wasm` module the frontend calls directly |
+| Engine tests (C++) | Catch2 v3, fetched via CMake FetchContent | Golden-value tests ported from TS, plus pipeline-equivalence and differential testing against `std::regex` |
+| Engine tests (TS) | Vitest (unit) + fast-check (property-based, planned) | Fast golden-value tests per pass; property/differential testing against a reference oracle — not yet started |
+| WASM bridge | Emscripten | Compiles the C++ engine to a `.wasm` module the frontend calls directly — built and verified |
 | Frontend | React + Vite | Fast dev loop; one component per pipeline stage, driven by pipeline output |
 | Visualization | Hand-rolled SVG | Keeps the "built from scratch" story intact — no charting/graph library |
 | AI proxy | Vercel Edge Function (serverless) | Keeps the AI API key server-side, never shipped to the client — a real, citable backend decision |
@@ -204,10 +206,10 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 | `SubsetConstructionPass` | ✅ Complete in TS (5/5) and C++ | Pending explain-it-back checkpoint (both languages) |
 | `MinimizationPass` (Moore's) | ✅ Complete in TS (4/4) and C++ | Pending explain-it-back checkpoint (both languages) |
 | `MatcherPass` | ✅ Complete in TS (8/8) and C++ | Pending explain-it-back checkpoint (both languages) |
-| `pipeline.cpp` | ✅ Complete — 169/169 total C++ assertions passing, incl. pipeline-equivalence test | Pending explain-it-back checkpoint |
-| Differential testing | 📋 Not started | — |
-| WASM binding (Emscripten) | 📋 Not started | — |
-| Visualizer | 📋 Not started | — |
+| `pipeline.cpp` | ✅ Complete — 4444/4444 total C++ assertions passing, incl. pipeline-equivalence and differential testing | Pending explain-it-back checkpoint |
+| Differential testing | ✅ C++ complete (fuzzed against `std::regex`) — 📋 TS-side not yet started | — |
+| WASM binding (Emscripten) | ✅ Complete — `regexlab_wasm` builds, ES module output verified | — |
+| Visualizer | 🔄 Scaffolded — PatternInput, PlaybackControls, AutomatonView, `useRegexEngine` hook in place; not yet polished | — |
 | AI suggestion layer + hard gate | 📋 Not started | — |
 | Deployment | 📋 Not started | — |
 | Hopcroft's / isomorphism testing (Hard Stretch) | 🔒 Locked until Core is done | — |
@@ -229,7 +231,7 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 | 12 | Hard Stretch, only if ahead of schedule | Deploy + demo video fallback | |
 | 13 | Buffer | Buffer | Final full run-through together |
 
-> **Note:** the theory track's engine work (all 5 passes + pipeline) is complete in both TS and C++, ahead of the plan's original per-week pacing above. The systems/UI track (frontend) has not yet started — it is currently the project's critical path, not the engine.
+> **Note:** the theory track's engine work (all 5 passes + pipeline + differential testing) is complete in C++, and the WASM binding is built and verified — ahead of the plan's original per-week pacing above. The systems/UI track (frontend) is scaffolded but not yet wired to the real engine output end-to-end — this, plus the AI suggestion layer, is currently the project's critical path.
 
 ---
 
@@ -240,7 +242,7 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . -j$(nproc)
-./engine_tests        # runs all golden-value + pipeline tests via Catch2
+./engine_tests        # runs all golden-value + pipeline + differential tests via Catch2
 ```
 
 **TypeScript engine (prototype, still in the repo):**
@@ -250,13 +252,16 @@ npm test          # runs all golden-value tests via Vitest
 npm run typecheck # strict TypeScript check, no emit
 ```
 
-No frontend yet.
-
-Once the frontend lands:
-
+**Frontend:**
 ```bash
 cd frontend
 npm install
+npm run build   # typecheck + bundle, confirms the app itself is sound
+```
+
+To run it with real data, you also need the WASM build — see the WASM build doc for the full `emcmake`/`emmake` steps. Once `regexlab.js`/`regexlab.wasm` are copied into `frontend/public/wasm/`:
+
+```bash
 npm run dev
 ```
 
@@ -266,7 +271,7 @@ npm run dev
 
 | Phase | Scope | Status |
 |---|---|---|
-| **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests, WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 In progress — engine + pipeline done in both languages, WASM/differential/visualizer/AI layer not started |
+| **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests, WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 In progress — engine, pipeline, C++ differential testing, and WASM binding done; visualizer scaffolded; TS differential testing and AI layer not started |
 | **Stretch A** | `+`, `?` quantifiers | 📋 Planned — cheap once `*` works |
 | **Stretch B** | `[a-z]` character classes | 📋 Planned — if time remains after Core is demo-ready |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | 🔒 Gated — only attempted once Core is finished *and* both teammates can explain differential testing and Moore's minimization without notes |
