@@ -1,4 +1,6 @@
-/docs/
+/docs/*
+!/docs/data-contracts.md
+!/docs/wasm-build.md
 node_modules/
 dist/
 build/
@@ -12,3 +14,8 @@ build/
 *.o
 *.obj
 compile_commands.json
+
+# WASM build output (regenerated locally; not committed)
+build-wasm/
+frontend/public/wasm/*.js
+frontend/public/wasm/*.wasm
