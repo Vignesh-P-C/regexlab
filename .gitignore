@@ -18,4 +18,4 @@ compile_commands.json
 # WASM build output (regenerated locally; not committed)
 build-wasm/
 frontend/public/wasm/*.js
-frontend/public/wasm/*.wasm
+frontend/public/wasm/*.wasm.claude/
