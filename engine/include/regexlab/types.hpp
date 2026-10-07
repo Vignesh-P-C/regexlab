@@ -74,7 +74,12 @@ enum class ParseErrorType {
     UnmatchedParen,
     UnexpectedToken,
     EmptyGroup,
-    DanglingOperator
+    DanglingOperator,
+    // Guards against unbounded recursion in the recursive-descent parser —
+    // pathologically nested groups (e.g. thousands of '(' in a row) would
+    // otherwise overflow the call stack instead of failing gracefully.
+    // See kMaxNestingDepth in parser-pass.cpp.
+    PatternTooComplex
 };
 
 struct ParseError {
@@ -181,6 +186,11 @@ inline bool operator==(const MatchStep& a, const MatchStep& b) {
 
 inline bool operator==(const MatchTrace& a, const MatchTrace& b) {
     return a.steps == b.steps && a.result == b.result && a.failurePosition == b.failurePosition;
+}
+
+inline bool operator==(const Automaton& a, const Automaton& b) {
+    return a.stateCount == b.stateCount && a.startState == b.startState &&
+           a.acceptStates == b.acceptStates && a.transitions == b.transitions;
 }
 
 }  // namespace regexlab

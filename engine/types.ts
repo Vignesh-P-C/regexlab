@@ -39,7 +39,14 @@ export type ASTNode =
  * (§12) consumes — it is never handed raw exception text.
  */
 export type ParseError = {
-  type: "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator";
+  type:
+    | "UnmatchedParen"
+    | "UnexpectedToken"
+    | "EmptyGroup"
+    | "DanglingOperator"
+    // Guards against unbounded recursion in the recursive-descent parser —
+    // see kMaxNestingDepth in parser-pass.ts.
+    | "PatternTooComplex";
   position: number;
   expected?: string;
   found?: string;

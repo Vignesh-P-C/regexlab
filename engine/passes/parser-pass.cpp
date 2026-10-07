@@ -30,6 +30,13 @@ private:
 
 class Parser {
 public:
+    // Bounds group-nesting depth so a pathological pattern (thousands of
+    // '(' in a row) fails as a normal ParseError instead of overflowing the
+    // call stack — reproduced experimentally: ~11-13k levels segfaults on
+    // an 8MB stack. 1000 is generous for any realistic hand-written or
+    // generated pattern while leaving a wide safety margin under that.
+    static constexpr int kMaxNestingDepth = 1000;
+
     explicit Parser(const std::string& pattern) : pattern_(pattern) {}
 
     ParseResult parse() {
@@ -59,6 +66,7 @@ public:
 private:
     const std::string& pattern_;
     size_t pos_ = 0;
+    int depth_ = 0;
 
     std::optional<char> peek() const {
         if (pos_ < pattern_.size()) return pattern_[pos_];
@@ -129,7 +137,14 @@ private:
                                                std::string(")")});
             }
 
+            if (++depth_ > kMaxNestingDepth) {
+                throw ParseFailure(ParseError{
+                    ParseErrorType::PatternTooComplex, static_cast<int>(openParenPos),
+                    std::string("nesting depth <= ") + std::to_string(kMaxNestingDepth),
+                    std::string("deeper group nesting")});
+            }
             ASTNodePtr inner = parseRegex();
+            --depth_;
 
             if (peek() != ')') {
                 std::string found =

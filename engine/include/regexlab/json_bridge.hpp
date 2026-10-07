@@ -21,12 +21,22 @@ namespace regexlab {
  * binding) — it never sees PipelineResult, MatchTrace, or any other
  * C++ type directly.
  *
- * Shape on success:
- *   {"ok": true, "trace": {"steps": [{"ch": "a", "activeStates": [1]}, ...],
- *                            "result": "match" | "no-match",
- *                            "failurePosition": null | number}}
+ * Shape on success — every pipeline stage is included, not just the final
+ * match, so the frontend visualizer can render AST -> NFA -> DFA -> min-DFA
+ * without re-invoking the engine per stage:
+ *   {"ok": true,
+ *    "ast": {"kind": "char"|"concat"|"alt"|"star", ...},
+ *    "nfa": Automaton, "dfa": Automaton, "minDfa": Automaton,
+ *    "trace": {"steps": [{"ch": "a", "activeStates": [1]}, ...],
+ *              "result": "match" | "no-match",
+ *              "failurePosition": null | number}}
+ * where Automaton is:
+ *   {"stateCount": number, "startState": number, "acceptStates": [number, ...],
+ *    "transitions": {"<stateId>": {"<symbol>|eps": [number, ...]}}}
  * Shape on parse failure:
- *   {"ok": false, "error": {"type": "UnmatchedParen" | ...,
+ *   {"ok": false, "error": {"type": "UnmatchedParen" | "UnexpectedToken" |
+ *                             "EmptyGroup" | "DanglingOperator" |
+ *                             "PatternTooComplex",
  *                             "position": number,
  *                             "expected": null | string,
  *                             "found": null | string}}

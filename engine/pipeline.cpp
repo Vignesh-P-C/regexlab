@@ -19,7 +19,8 @@ PipelineResult runPipeline(const std::string& pattern, const std::string& input)
     if (!parsed.ok) {
         // Short-circuit: an invalid pattern never reaches Thompson's
         // construction or anything after it.
-        return PipelineResult{false, MatchTrace{}, parsed.error};
+        return PipelineResult{false, nullptr, Automaton{}, Automaton{},
+                               Automaton{},    MatchTrace{}, parsed.error};
     }
 
     Automaton nfa = thompsonConstruction(parsed.ast);
@@ -27,7 +28,10 @@ PipelineResult runPipeline(const std::string& pattern, const std::string& input)
     Automaton minDfa = minimize(dfa);
     MatchTrace trace = match(minDfa, input);
 
-    return PipelineResult{true, trace, ParseError{}};
+    // Every intermediate stage is carried through, not just the final
+    // trace — this is what lets the frontend visualizer render AST -> NFA
+    // -> DFA -> min-DFA, not only the match/no-match result.
+    return PipelineResult{true, parsed.ast, nfa, dfa, minDfa, trace, ParseError{}};
 }
 
 }  // namespace regexlab

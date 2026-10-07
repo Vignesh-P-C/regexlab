@@ -108,3 +108,20 @@ describe("ParserPass — malformed patterns (golden ParseError shapes)", () => {
     });
   });
 });
+
+describe("ParserPass — nesting depth guard", () => {
+  it("nesting well under the limit still parses normally", () => {
+    const pattern = "(".repeat(500) + "a" + ")".repeat(500);
+    const r = parse(pattern);
+    expect(r.ok).toBe(true);
+  });
+
+  it("nesting past the limit fails gracefully as PatternTooComplex", () => {
+    const pattern = "(".repeat(1500) + "a" + ")".repeat(1500);
+    const r = parse(pattern);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.type).toBe("PatternTooComplex");
+    }
+  });
+});
