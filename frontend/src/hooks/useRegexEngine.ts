@@ -5,6 +5,10 @@ type RegexLabModule = {
   runPipeline: (pattern: string, input: string) => string;
 };
 
+type RegexLabModuleFactory = (opts?: {
+  locateFile?: (path: string) => string;
+}) => Promise<RegexLabModule>;
+
 type EngineState = { status: "loading" } | { status: "ready" } | { status: "error"; message: string };
 
 /**
@@ -30,8 +34,27 @@ export function useRegexEngine() {
     (async () => {
       try {
         const url = "/wasm/regexlab.js";
-        const mod: { default: () => Promise<RegexLabModule> } = await import(/* @vite-ignore */ url);
-        const instance = await mod.default();
+        // Vite's dev server refuses import() of files served from /public
+        // ("should not be imported from source code") -- it bypasses the
+        // plugin pipeline. Fetching the raw text and importing it from a
+        // Blob URL sidesteps that restriction, and works identically in
+        // dev, build, and preview.
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`);
+        }
+        const code = await res.text();
+        const blobUrl = URL.createObjectURL(new Blob([code], { type: "application/javascript" }));
+        let mod: { default: RegexLabModuleFactory };
+        try {
+          mod = await import(/* @vite-ignore */ blobUrl);
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+        // A blob: URL has no real "directory" for Emscripten to resolve
+        // the sibling .wasm file against, so locateFile overrides that
+        // auto-resolution and points it back at the real served path.
+        const instance = await mod.default({ locateFile: (path) => `/wasm/${path}` });
         if (cancelled) return;
         moduleRef.current = instance;
         setState({ status: "ready" });
