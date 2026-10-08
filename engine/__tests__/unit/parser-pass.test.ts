@@ -195,3 +195,69 @@ describe("ParserPass — pattern length guard", () => {
     }
   });
 });
+
+describe("ParserPass — non-ASCII input is rejected cleanly", () => {
+  it("a non-ASCII literal reports the position of the character", () => {
+    expect(parse("caf\u00e9")).toEqual({
+      ok: false,
+      error: {
+        type: "UnexpectedToken",
+        position: 3,
+        expected: "an ASCII character",
+        found: "non-ASCII character",
+      },
+    });
+  });
+
+  it("a non-ASCII character at the very start reports position 0", () => {
+    const r = parse("\u00e9");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.position).toBe(0);
+  });
+
+  it("an emoji is rejected at its first code unit", () => {
+    const r = parse("a\u{1F600}");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.type).toBe("UnexpectedToken");
+      expect(r.error.position).toBe(1);
+    }
+  });
+
+  it("a non-ASCII character inside a group is rejected", () => {
+    const r = parse("(\u00e9)");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.position).toBe(1);
+  });
+
+  it("an escaped non-ASCII character is rejected too", () => {
+    const r = parse("a\\\u00e9");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.type).toBe("UnexpectedToken");
+      expect(r.error.position).toBe(2);
+    }
+  });
+
+  it("the leftmost error wins: an earlier syntax error is reported first", () => {
+    const r = parse(")\u00e9");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.type).toBe("DanglingOperator");
+      expect(r.error.position).toBe(0);
+    }
+  });
+
+  it("the boundary is exact: 0x7F is accepted, 0x80 is rejected", () => {
+    expect(parse("a\u007f").ok).toBe(true);
+    const r = parse("\u0080");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.position).toBe(0);
+  });
+
+  it("the error never carries the raw character", () => {
+    const r = parse("caf\u00e9");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.found).toBe("non-ASCII character");
+  });
+});

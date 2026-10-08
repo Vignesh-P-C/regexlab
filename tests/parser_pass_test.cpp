@@ -183,3 +183,69 @@ TEST_CASE("ParserPass — pattern length guard", "[parser]") {
         REQUIRE(result.error.expected == std::string("pattern length <= 5"));
     }
 }
+
+TEST_CASE("ParserPass — non-ASCII input is rejected cleanly", "[parser]") {
+    // Written with explicit byte escapes so the tests do not depend on the
+    // source file's encoding. "\xC3\xA9" is the UTF-8 encoding of e-acute.
+    const ParseError expectedAt3 = ParseError{ParseErrorType::UnexpectedToken, 3,
+                                              std::string("an ASCII character"),
+                                              std::string("non-ASCII character")};
+
+    SECTION("a non-ASCII literal reports the position of its first byte") {
+        ParseResult result = parse(std::string("caf\xC3\xA9"));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.type == expectedAt3.type);
+        REQUIRE(result.error.position == 3);
+        REQUIRE(result.error.expected == expectedAt3.expected);
+        REQUIRE(result.error.found == expectedAt3.found);
+    }
+
+    SECTION("a non-ASCII character at the very start reports position 0") {
+        ParseResult result = parse(std::string("\xC3\xA9"));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.position == 0);
+    }
+
+    SECTION("a multi-byte emoji is rejected at its first byte") {
+        ParseResult result = parse(std::string("a\xF0\x9F\x98\x80"));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.type == ParseErrorType::UnexpectedToken);
+        REQUIRE(result.error.position == 1);
+    }
+
+    SECTION("a non-ASCII character inside a group is rejected") {
+        ParseResult result = parse(std::string("(\xC3\xA9)"));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.position == 1);
+    }
+
+    SECTION("an escaped non-ASCII character is rejected too") {
+        ParseResult result = parse(std::string("a\\\xC3\xA9"));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.type == ParseErrorType::UnexpectedToken);
+        REQUIRE(result.error.position == 2);
+    }
+
+    SECTION("the leftmost error wins: an earlier syntax error is reported first") {
+        ParseResult result = parse(std::string(")\xC3\xA9"));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.type == ParseErrorType::DanglingOperator);
+        REQUIRE(result.error.position == 0);
+    }
+
+    SECTION("the boundary is exact: 0x7F is accepted, 0x80 is rejected") {
+        REQUIRE(parse(std::string("a\x7F")).ok);
+        ParseResult result = parse(std::string("\x80"));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.position == 0);
+    }
+
+    SECTION("the error never carries a raw byte (it must stay valid UTF-8 for JSON)") {
+        ParseResult result = parse(std::string("caf\xC3\xA9"));
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.found.has_value());
+        for (char c : *result.error.found) {
+            REQUIRE(static_cast<unsigned char>(c) < 0x80);
+        }
+    }
+}

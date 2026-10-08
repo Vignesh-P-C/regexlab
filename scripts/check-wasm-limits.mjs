@@ -74,8 +74,11 @@ check("nested depth 250 (501 chars)", "(".repeat(250) + "a" + ")".repeat(250), "
 check("nested depth 1001", "(".repeat(1001) + "a" + ")".repeat(1001), "a", "PatternTooComplex@500");
 check("nested depth 13000", "(".repeat(13000) + "a" + ")".repeat(13000), "a", "PatternTooComplex@500");
 
-console.log("\n-- D4/D5: non-ASCII --");
-check("non-ASCII pattern (cafe+accent)", "caf\u00e9", "a"); // today: throws CppException
+console.log("\n-- D4: non-ASCII (pattern restricted to ASCII; error must be a clean result, not an exception) --");
+check("non-ASCII pattern (cafe+accent)", "caf\u00e9", "a", "UnexpectedToken@3");
+check("non-ASCII at start", "\u00e9", "a", "UnexpectedToken@0");
+check("emoji in pattern", "a\u{1F600}", "a", "UnexpectedToken@1");
+check("non-ASCII after a syntax error", ")\u00e9", "a", "DanglingOperator@0");
 check("non-ASCII input only", "a", "\u00e9", "ok no-match");
 
 const failed = rows.filter((r) => !r.pass);

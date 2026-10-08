@@ -91,6 +91,24 @@ private:
 
     char advance() { return pattern_[pos_++]; }
 
+    /**
+     * The engine's alphabet is ASCII (bytes 0x00-0x7F). A byte >= 0x80 is
+     * rejected where a literal would be consumed, so the leftmost error in
+     * the pattern still wins (")\xC3\xA9" reports the dangling ')' first).
+     *
+     * `found` is a fixed description, never the raw byte: a lone byte of a
+     * multi-byte UTF-8 sequence is invalid UTF-8 and made the JSON bridge
+     * throw (nlohmann type_error.316) before this check existed. See D4.
+     */
+    void requireAscii(char c, size_t pos) const {
+        if (static_cast<unsigned char>(c) >= 0x80) {
+            throw ParseFailure(ParseError{ParseErrorType::UnexpectedToken,
+                                           static_cast<int>(pos),
+                                           std::string("an ASCII character"),
+                                           std::string("non-ASCII character")});
+        }
+    }
+
     /** regex ::= term ('|' term)* */
     ASTNodePtr parseRegex() {
         ASTNodePtr node = parseTerm();
@@ -192,10 +210,12 @@ private:
                                                std::string("a character after '\\'"),
                                                std::string("end of input")});
             }
+            requireAscii(*escaped, pos_);
             advance();
             return makeChar(*escaped);
         }
 
+        requireAscii(*c, pos_);
         advance();
         return makeChar(*c);
     }
