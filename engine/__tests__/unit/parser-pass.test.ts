@@ -110,18 +110,88 @@ describe("ParserPass — malformed patterns (golden ParseError shapes)", () => {
 });
 
 describe("ParserPass — nesting depth guard", () => {
+  // The 500-char length cap would trip first on these long patterns, so lift
+  // it: these tests target the depth guard specifically.
+  const liftedLength = { maxPatternLength: 1_000_000 };
+  const nested = (depth: number) => "(".repeat(depth) + "a" + ")".repeat(depth);
+
   it("nesting well under the limit still parses normally", () => {
-    const pattern = "(".repeat(500) + "a" + ")".repeat(500);
-    const r = parse(pattern);
-    expect(r.ok).toBe(true);
+    expect(parse(nested(500), liftedLength).ok).toBe(true);
   });
 
-  it("nesting past the limit fails gracefully as PatternTooComplex", () => {
-    const pattern = "(".repeat(1500) + "a" + ")".repeat(1500);
-    const r = parse(pattern);
+  it("nesting exactly at the limit parses", () => {
+    expect(parse(nested(1000), liftedLength).ok).toBe(true);
+  });
+
+  it("one level past the limit is rejected by the depth guard", () => {
+    const r = parse(nested(1001), liftedLength);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.type).toBe("PatternTooComplex");
+      expect(r.error.position).toBe(1000);
+      expect(r.error.expected).toBe("nesting depth <= 1000");
+    }
+  });
+
+  it("far past the limit fails gracefully as PatternTooComplex", () => {
+    const r = parse(nested(1500), liftedLength);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.type).toBe("PatternTooComplex");
+    }
+  });
+});
+
+describe("ParserPass — pattern length guard", () => {
+  it("a pattern exactly at the cap parses", () => {
+    expect(parse("a".repeat(500)).ok).toBe(true);
+  });
+
+  it("one character past the cap is rejected with a length error", () => {
+    expect(parse("a".repeat(501))).toEqual({
+      ok: false,
+      error: {
+        type: "PatternTooComplex",
+        position: 500,
+        expected: "pattern length <= 500",
+        found: "longer pattern",
+      },
+    });
+  });
+
+  it("applies to every shape, not just plain literals", () => {
+    const alternation = Array(251).fill("a").join("|"); // 501 chars
+    const stars = "a*".repeat(251); // 502 chars
+    expect(alternation.length).toBe(501);
+    for (const pattern of [alternation, stars]) {
+      const r = parse(pattern);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.type).toBe("PatternTooComplex");
+    }
+  });
+
+  it("the length cap is checked before anything else", () => {
+    // 501 chars that would otherwise be a syntax error at position 0.
+    const r = parse(")" + "a".repeat(500));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.type).toBe("PatternTooComplex");
+  });
+
+  it("max nesting reachable under the default cap stays far below the depth limit", () => {
+    // 249 pairs + 'a' = 499 chars: parses fine, and 249 << 1000, which is why
+    // the depth guard is unreachable through default limits.
+    const pattern = "(".repeat(249) + "a" + ")".repeat(249);
+    expect(pattern.length).toBe(499);
+    expect(parse(pattern).ok).toBe(true);
+  });
+
+  it("custom limits are honored", () => {
+    expect(parse("abcde", { maxPatternLength: 5 }).ok).toBe(true);
+    const r = parse("abcdef", { maxPatternLength: 5 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.position).toBe(5);
+      expect(r.error.expected).toBe("pattern length <= 5");
     }
   });
 });

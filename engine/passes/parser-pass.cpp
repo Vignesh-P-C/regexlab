@@ -30,17 +30,32 @@ private:
 
 class Parser {
 public:
-    // Bounds group-nesting depth so a pathological pattern (thousands of
-    // '(' in a row) fails as a normal ParseError instead of overflowing the
-    // call stack — reproduced experimentally: ~11-13k levels segfaults on
-    // an 8MB stack. 1000 is generous for any realistic hand-written or
-    // generated pattern while leaving a wide safety margin under that.
-    static constexpr int kMaxNestingDepth = 1000;
-
-    explicit Parser(const std::string& pattern) : pattern_(pattern) {}
+    // Two guards keep recursion bounded (limits come from ParseLimits):
+    //
+    //  - maxNestingDepth: bounds group nesting so thousands of '(' in a row
+    //    fail as a normal ParseError instead of overflowing the call stack
+    //    (reproduced: ~11-13k levels segfaults on an 8MB stack).
+    //
+    //  - maxPatternLength: the depth guard only counts '(' , but long chains
+    //    of plain concatenation/alternation build equally deep ASTs (depth =
+    //    pattern length) that recurse in the AST destructor, ThompsonPass and
+    //    MinimizationPass. Measured on emcc 6.0.9 (Release, 5MB stack): a
+    //    plain literal costs 0.24s at 500 chars and 0.80s at 1000 (Moore's
+    //    minimization is O(n^2)), and every shape hits the JS call-stack
+    //    ceiling by ~1500-3000 chars. 500 keeps the worst shape fast with
+    //    ~3x margin under the lowest crash ceiling. See issue #29.
+    Parser(const std::string& pattern, const ParseLimits& limits)
+        : pattern_(pattern), limits_(limits) {}
 
     ParseResult parse() {
         try {
+            if (pattern_.size() > static_cast<size_t>(limits_.maxPatternLength)) {
+                throw ParseFailure(ParseError{
+                    ParseErrorType::PatternTooComplex, limits_.maxPatternLength,
+                    std::string("pattern length <= ") + std::to_string(limits_.maxPatternLength),
+                    std::string("longer pattern")});
+            }
+
             ASTNodePtr ast = parseRegex();
 
             if (pos_ < pattern_.size()) {
@@ -65,6 +80,7 @@ public:
 
 private:
     const std::string& pattern_;
+    ParseLimits limits_;
     size_t pos_ = 0;
     int depth_ = 0;
 
@@ -137,10 +153,10 @@ private:
                                                std::string(")")});
             }
 
-            if (++depth_ > kMaxNestingDepth) {
+            if (++depth_ > limits_.maxNestingDepth) {
                 throw ParseFailure(ParseError{
                     ParseErrorType::PatternTooComplex, static_cast<int>(openParenPos),
-                    std::string("nesting depth <= ") + std::to_string(kMaxNestingDepth),
+                    std::string("nesting depth <= ") + std::to_string(limits_.maxNestingDepth),
                     std::string("deeper group nesting")});
             }
             ASTNodePtr inner = parseRegex();
@@ -187,8 +203,8 @@ private:
 
 }  // namespace
 
-ParseResult parse(const std::string& pattern) {
-    Parser parser(pattern);
+ParseResult parse(const std::string& pattern, const ParseLimits& limits) {
+    Parser parser(pattern, limits);
     return parser.parse();
 }
 

@@ -1,6 +1,6 @@
 // check-wasm-limits.mjs
-// Probes the compiled RegexLab WASM module for the acceptance cases and for
-// stack-depth robustness. Each probe runs in its own child process with a
+// Probes the compiled RegexLab WASM module for the acceptance cases, the
+// pattern-length cap (issue #29) and stack robustness. Each probe runs in its own child process with a
 // timeout, because a linear-memory stack overflow corrupts the module
 // instance (and can hang), so probes must never share an instance.
 //
@@ -56,23 +56,23 @@ check("(a|b)*ab on aab", "(a|b)*ab", "aab", "ok match");
 check("(a|b)*ab on aba", "(a|b)*ab", "aba", "ok no-match");
 check("(ab on ab", "(ab", "ab", "UnmatchedParen@0");
 
-console.log("\n-- depth guard: nested parens (1000 ok, 1001 must be PatternTooComplex) --");
-for (const d of [100, 304, 500, 999, 1000]) {
-  check(`nested depth ${d}`, "(".repeat(d) + "a" + ")".repeat(d), "a", "ok");
-}
-check("nested depth 1001", "(".repeat(1001) + "a" + ")".repeat(1001), "a", "PatternTooComplex");
-check("nested depth 13000", "(".repeat(13000) + "a" + ")".repeat(13000), "a", "PatternTooComplex");
+console.log("\n-- D2: pattern-length cap (500 ok, 501 must be PatternTooComplex@500) --");
+check("literal x500", "a".repeat(500), "a", "ok");
+check("literal x501", "a".repeat(501), "a", "PatternTooComplex@500");
+check("literal x1000", "a".repeat(1000), "a", "PatternTooComplex@500");
+check("literal x5000 (was a hang)", "a".repeat(5000), "a", "PatternTooComplex@500");
+check("alternation 250 terms (499 chars)", Array(250).fill("a").join("|"), "a", "ok");
+check("alternation 251 terms (501 chars)", Array(251).fill("a").join("|"), "a", "PatternTooComplex@500");
+check("star chain x250 (500 chars)", "a*".repeat(250), "a", "ok");
+check("star chain x251 (502 chars)", "a*".repeat(251), "a", "PatternTooComplex@500");
 
-console.log("\n-- D2 class: long paren-free patterns (must be handled, never crash) --");
-for (const n of [222, 500, 1000, 2000, 5000]) {
-  check(`literal x${n}`, "a".repeat(n), "a");
-}
-for (const n of [222, 500, 1000]) {
-  check(`alternation x${n}`, Array(n).fill("a").join("|"), "a");
-}
-for (const n of [221, 500, 1000]) {
-  check(`star chain x${n}`, "a*".repeat(n), "a");
-}
+console.log("\n-- nesting: the 500-char cap fires before the depth-1000 guard --");
+// 249 pairs + 'a' = 499 chars (allowed); 250 pairs = 501 chars (over the cap).
+check("nested depth 100", "(".repeat(100) + "a" + ")".repeat(100), "a", "ok");
+check("nested depth 249 (499 chars)", "(".repeat(249) + "a" + ")".repeat(249), "a", "ok");
+check("nested depth 250 (501 chars)", "(".repeat(250) + "a" + ")".repeat(250), "a", "PatternTooComplex@500");
+check("nested depth 1001", "(".repeat(1001) + "a" + ")".repeat(1001), "a", "PatternTooComplex@500");
+check("nested depth 13000", "(".repeat(13000) + "a" + ")".repeat(13000), "a", "PatternTooComplex@500");
 
 console.log("\n-- D4/D5: non-ASCII --");
 check("non-ASCII pattern (cafe+accent)", "caf\u00e9", "a"); // today: throws CppException

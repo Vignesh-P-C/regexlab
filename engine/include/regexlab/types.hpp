@@ -75,10 +75,10 @@ enum class ParseErrorType {
     UnexpectedToken,
     EmptyGroup,
     DanglingOperator,
-    // Guards against unbounded recursion in the recursive-descent parser —
-    // pathologically nested groups (e.g. thousands of '(' in a row) would
-    // otherwise overflow the call stack instead of failing gracefully.
-    // See kMaxNestingDepth in parser-pass.cpp.
+    // Guards against unbounded recursion — pathologically nested groups
+    // (thousands of '(' in a row) or very long patterns would otherwise
+    // overflow the call stack instead of failing gracefully. See the
+    // nesting-depth and pattern-length limits in parser-pass.hpp/.cpp.
     PatternTooComplex
 };
 

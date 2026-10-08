@@ -99,20 +99,87 @@ TEST_CASE("ParserPass — malformed patterns (golden ParseError shapes)", "[pars
 }
 
 TEST_CASE("ParserPass — nesting depth guard", "[parser]") {
-    SECTION("nesting well under the limit still parses normally") {
-        std::string pattern(500, '(');
+    // The 500-char length cap would trip first on these long patterns, so
+    // lift it: these tests target the depth guard specifically.
+    ParseLimits liftedLength;
+    liftedLength.maxPatternLength = 1000000;
+
+    auto nested = [](int depth) {
+        std::string pattern(static_cast<size_t>(depth), '(');
         pattern += "a";
-        pattern += std::string(500, ')');
-        ParseResult result = parse(pattern);
-        REQUIRE(result.ok);
+        pattern += std::string(static_cast<size_t>(depth), ')');
+        return pattern;
+    };
+
+    SECTION("nesting well under the limit still parses normally") {
+        REQUIRE(parse(nested(500), liftedLength).ok);
     }
 
-    SECTION("nesting past the limit fails gracefully instead of crashing") {
-        std::string pattern(1500, '(');
-        pattern += "a";
-        pattern += std::string(1500, ')');
-        ParseResult result = parse(pattern);
+    SECTION("nesting exactly at the limit parses") {
+        REQUIRE(parse(nested(1000), liftedLength).ok);
+    }
+
+    SECTION("one level past the limit is rejected by the depth guard") {
+        ParseResult result = parse(nested(1001), liftedLength);
         REQUIRE_FALSE(result.ok);
         REQUIRE(result.error.type == ParseErrorType::PatternTooComplex);
+        REQUIRE(result.error.position == 1000);
+        REQUIRE(result.error.expected == std::string("nesting depth <= 1000"));
+    }
+
+    SECTION("far past the limit fails gracefully instead of crashing") {
+        ParseResult result = parse(nested(1500), liftedLength);
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.type == ParseErrorType::PatternTooComplex);
+    }
+}
+
+TEST_CASE("ParserPass — pattern length guard", "[parser]") {
+    SECTION("a pattern exactly at the cap parses") {
+        REQUIRE(parse(std::string(500, 'a')).ok);
+    }
+
+    SECTION("one character past the cap is rejected with a length error") {
+        REQUIRE(parse(std::string(501, 'a')) ==
+                err(ParseErrorType::PatternTooComplex, 500,
+                    std::string("pattern length <= 500"), std::string("longer pattern")));
+    }
+
+    SECTION("applies to every shape, not just plain literals") {
+        std::string alternation;  // a|a|a|... (501 chars)
+        for (int i = 0; i < 251; ++i) alternation += (i ? "|a" : "a");
+        REQUIRE(alternation.size() == 501);
+        REQUIRE(parse(alternation).error.type == ParseErrorType::PatternTooComplex);
+
+        std::string stars;  // a*a*a*... (502 chars)
+        for (int i = 0; i < 251; ++i) stars += "a*";
+        REQUIRE(stars.size() == 502);
+        REQUIRE(parse(stars).error.type == ParseErrorType::PatternTooComplex);
+    }
+
+    SECTION("the length cap is checked before anything else") {
+        // 501 chars that would otherwise be a syntax error at position 0.
+        std::string pattern = ")" + std::string(500, 'a');
+        REQUIRE(parse(pattern).error.type == ParseErrorType::PatternTooComplex);
+    }
+
+    SECTION("max nesting reachable under the default cap stays far below the depth limit") {
+        // 249 pairs + 'a' = 499 chars: parses fine, and 249 << 1000, which is
+        // why the depth guard is unreachable through default limits.
+        std::string pattern(249, '(');
+        pattern += "a";
+        pattern += std::string(249, ')');
+        REQUIRE(pattern.size() == 499);
+        REQUIRE(parse(pattern).ok);
+    }
+
+    SECTION("custom limits are honored") {
+        ParseLimits tiny;
+        tiny.maxPatternLength = 5;
+        REQUIRE(parse("abcde", tiny).ok);
+        ParseResult result = parse("abcdef", tiny);
+        REQUIRE_FALSE(result.ok);
+        REQUIRE(result.error.position == 5);
+        REQUIRE(result.error.expected == std::string("pattern length <= 5"));
     }
 }
