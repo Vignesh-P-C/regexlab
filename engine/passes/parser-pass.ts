@@ -104,6 +104,23 @@ class Parser {
     return node;
   }
 
+  /**
+   * The engine's alphabet is ASCII (code units 0x00-0x7F). A unit > 0x7F is
+   * rejected where a literal would be consumed, so the leftmost error in the
+   * pattern still wins. Mirrors requireAscii in parser-pass.cpp; `found` is a
+   * fixed description, never the raw character (see D4).
+   */
+  private requireAscii(c: string, position: number): void {
+    if (c.charCodeAt(0) > 0x7f) {
+      throw new ParseFailure({
+        type: "UnexpectedToken",
+        position,
+        expected: "an ASCII character",
+        found: "non-ASCII character",
+      });
+    }
+  }
+
   /** Lookahead helper: could the next token legally start a new factor? */
   private canStartFactor(): boolean {
     const c = this.peek();
@@ -195,10 +212,12 @@ class Parser {
           found: "end of input",
         });
       }
+      this.requireAscii(escaped, this.pos);
       this.advance();
       return { kind: "char", value: escaped };
     }
 
+    this.requireAscii(c, this.pos);
     this.advance();
     return { kind: "char", value: c };
   }
