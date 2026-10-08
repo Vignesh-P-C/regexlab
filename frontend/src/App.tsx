@@ -15,11 +15,22 @@ function App() {
   const [snapshot, setSnapshot] = useState<PipelineSnapshot | null>(null);
   const [activeStage, setActiveStage] = useState<Stage>("ast");
   const [activeStep, setActiveStep] = useState(0);
+  const [engineError, setEngineError] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.status !== "ready") return;
     const handle = setTimeout(() => {
-      setSnapshot(runPipeline(pattern, input));
+      try {
+        setSnapshot(runPipeline(pattern, input));
+        setEngineError(null);
+      } catch (err) {
+        // D5 fix: a thrown exception (e.g. non-ASCII input hitting the
+        // WASM boundary) must never leave the previous pattern's result
+        // on screen looking like a current, correct answer.
+        console.error(err);
+        setSnapshot(null);
+        setEngineError(err instanceof Error ? err.message : "The engine failed to process this pattern.");
+      }
       setActiveStep(0);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, DEBOUNCE_MS);
@@ -45,6 +56,7 @@ function App() {
 
       {state.status === "loading" && <p>Loading engine…</p>}
       {state.status === "error" && <p className="engine-error">{state.message}</p>}
+      {engineError && <p className="engine-error">{engineError}</p>}
 
       <PatternInput
         pattern={pattern}

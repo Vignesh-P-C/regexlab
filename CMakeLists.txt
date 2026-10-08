@@ -4,6 +4,14 @@ project(regexlab_engine CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# WASM builds must be optimized -- an unoptimized (-O0) Emscripten build
+# overflows the browser's JS stack at a far shallower recursion depth than
+# the parser's own kMaxNestingDepth guard (parser-pass.cpp), making that
+# guard effectively untested in production. Default to Release unless the
+# invoker explicitly overrides it.
+if(EMSCRIPTEN AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
 # Applies only to our own targets (added per-target below), never to
 # FetchContent'd third-party code (Catch2, nlohmann/json).
@@ -78,6 +86,7 @@ if(EMSCRIPTEN)
         "-sEXPORT_NAME=RegexLabModule"
         "-sALLOW_MEMORY_GROWTH=1"
         "-sENVIRONMENT=web,node"
+        "-sSTACK_SIZE=5242880"
     )
     set_target_properties(regexlab_wasm PROPERTIES OUTPUT_NAME "regexlab")
 endif()
