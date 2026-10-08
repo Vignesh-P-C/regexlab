@@ -38,16 +38,42 @@ class ParseFailure extends Error {
   }
 }
 
+/**
+ * Safety limits on what the parser will accept. Mirrors ParseLimits in
+ * parser-pass.hpp. Production code uses the defaults; the parameter exists
+ * so tests can lift one limit to exercise the other (with the default
+ * 500-char length cap a pattern nests at most 499 levels, so the depth guard
+ * is unreachable through default limits and is kept as defense in depth).
+ */
+export const DEFAULT_MAX_PATTERN_LENGTH = 500;
+export const DEFAULT_MAX_NESTING_DEPTH = 1000;
+
+export type ParseLimits = {
+  maxPatternLength: number;
+  maxNestingDepth: number;
+};
+
+const DEFAULT_LIMITS: ParseLimits = {
+  maxPatternLength: DEFAULT_MAX_PATTERN_LENGTH,
+  maxNestingDepth: DEFAULT_MAX_NESTING_DEPTH,
+};
+
 class Parser {
-  // Bounds group-nesting depth so a pathological pattern (thousands of '('
-  // in a row) fails as a normal ParseError instead of blowing the call
-  // stack. Mirrors the same guard in parser-pass.cpp.
-  private static readonly MAX_NESTING_DEPTH = 1000;
+  // Two guards keep recursion bounded (mirrors parser-pass.cpp):
+  //  - maxNestingDepth: thousands of '(' in a row fail as a normal
+  //    ParseError instead of blowing the call stack.
+  //  - maxPatternLength: the depth guard only counts '(', but long chains of
+  //    plain concatenation/alternation build equally deep ASTs (depth =
+  //    pattern length). 500 is sized from measurements (see issue #29 and
+  //    the comment in parser-pass.cpp).
 
   private pos = 0;
   private depth = 0;
 
-  constructor(private readonly pattern: string) {}
+  constructor(
+    private readonly pattern: string,
+    private readonly limits: ParseLimits,
+  ) {}
 
   private peek(): string | undefined {
     return this.pattern[this.pos];
@@ -76,6 +102,23 @@ class Parser {
       node = { kind: "concat", left: node, right };
     }
     return node;
+  }
+
+  /**
+   * The engine's alphabet is ASCII (code units 0x00-0x7F). A unit > 0x7F is
+   * rejected where a literal would be consumed, so the leftmost error in the
+   * pattern still wins. Mirrors requireAscii in parser-pass.cpp; `found` is a
+   * fixed description, never the raw character (see D4).
+   */
+  private requireAscii(c: string, position: number): void {
+    if (c.charCodeAt(0) > 0x7f) {
+      throw new ParseFailure({
+        type: "UnexpectedToken",
+        position,
+        expected: "an ASCII character",
+        found: "non-ASCII character",
+      });
+    }
   }
 
   /** Lookahead helper: could the next token legally start a new factor? */
@@ -123,11 +166,11 @@ class Parser {
         });
       }
 
-      if (++this.depth > Parser.MAX_NESTING_DEPTH) {
+      if (++this.depth > this.limits.maxNestingDepth) {
         throw new ParseFailure({
           type: "PatternTooComplex",
           position: openParenPos,
-          expected: `nesting depth <= ${Parser.MAX_NESTING_DEPTH}`,
+          expected: `nesting depth <= ${this.limits.maxNestingDepth}`,
           found: "deeper group nesting",
         });
       }
@@ -169,16 +212,27 @@ class Parser {
           found: "end of input",
         });
       }
+      this.requireAscii(escaped, this.pos);
       this.advance();
       return { kind: "char", value: escaped };
     }
 
+    this.requireAscii(c, this.pos);
     this.advance();
     return { kind: "char", value: c };
   }
 
   parse(): ParseResult {
     try {
+      if (this.pattern.length > this.limits.maxPatternLength) {
+        throw new ParseFailure({
+          type: "PatternTooComplex",
+          position: this.limits.maxPatternLength,
+          expected: `pattern length <= ${this.limits.maxPatternLength}`,
+          found: "longer pattern",
+        });
+      }
+
       const ast = this.parseRegex();
 
       if (this.pos < this.pattern.length) {
@@ -210,6 +264,6 @@ class Parser {
 }
 
 /** ParserPass entry point: string in, ParseResult out. Pure, no side effects. */
-export function parse(pattern: string): ParseResult {
-  return new Parser(pattern).parse();
+export function parse(pattern: string, limits: Partial<ParseLimits> = {}): ParseResult {
+  return new Parser(pattern, { ...DEFAULT_LIMITS, ...limits }).parse();
 }

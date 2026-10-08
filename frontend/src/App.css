@@ -8,8 +8,9 @@
 .stage-tabs button { margin-right: 4px; }
 .stage-tabs button.active { font-weight: bold; text-decoration: underline; }
 .step-scrubber { display: flex; align-items: center; gap: 8px; }
-.automaton-view { border: 1px solid #ddd; border-radius: 8px; }
+.automaton-view { border: 1px solid #ddd; border-radius: 8px; overflow: auto; }
 .automaton-svg, .ast-svg { width: 100%; height: auto; }
+.edge-label { paint-order: stroke; stroke: var(--bg, #fff); stroke-width: 3px; stroke-linejoin: round; }
 .state { fill: white; stroke: #333; stroke-width: 1.5; }
 .state.active { fill: #fde68a; stroke: #b45309; stroke-width: 2.5; }
 .ast-node { fill: white; stroke: #333; }

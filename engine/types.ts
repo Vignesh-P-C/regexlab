@@ -44,8 +44,8 @@ export type ParseError = {
     | "UnexpectedToken"
     | "EmptyGroup"
     | "DanglingOperator"
-    // Guards against unbounded recursion in the recursive-descent parser —
-    // see kMaxNestingDepth in parser-pass.ts.
+    // Guards against unbounded recursion — the nesting-depth and
+    // pattern-length limits in parser-pass.ts / parser-pass.cpp.
     | "PatternTooComplex";
   position: number;
   expected?: string;

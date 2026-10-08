@@ -82,8 +82,11 @@ TEST_CASE("json_bridge — success carries every pipeline stage, not just the tr
     REQUIRE(j["trace"]["result"].get<std::string>() == "match");
 }
 
-TEST_CASE("json_bridge — pattern nested past the depth guard reports PatternTooComplex",
+TEST_CASE("json_bridge — pathological nesting reports PatternTooComplex end to end",
           "[json_bridge]") {
+    // With default limits the 500-char length cap fires first on this pattern;
+    // the depth guard itself is covered in parser_pass_test.cpp with the cap
+    // lifted. This test pins the end-to-end behavior: graceful JSON error.
     std::string pathological(1500, '(');
     pathological += "a";
     pathological += std::string(1500, ')');
@@ -93,4 +96,40 @@ TEST_CASE("json_bridge — pattern nested past the depth guard reports PatternTo
 
     REQUIRE(j["ok"].get<bool>() == false);
     REQUIRE(j["error"]["type"].get<std::string>() == "PatternTooComplex");
+}
+
+TEST_CASE("json_bridge — pattern one past the length cap reports the length error",
+          "[json_bridge]") {
+    json atCap = json::parse(runPipelineJson(std::string(500, 'a'), "a"));
+    REQUIRE(atCap["ok"].get<bool>() == true);
+
+    json pastCap = json::parse(runPipelineJson(std::string(501, 'a'), "a"));
+    REQUIRE(pastCap["ok"].get<bool>() == false);
+    REQUIRE(pastCap["error"]["type"].get<std::string>() == "PatternTooComplex");
+    REQUIRE(pastCap["error"]["position"].get<int>() == 500);
+    REQUIRE(pastCap["error"]["expected"].get<std::string>() == "pattern length <= 500");
+}
+
+TEST_CASE("json_bridge — non-ASCII pattern reports UnexpectedToken instead of throwing",
+          "[json_bridge]") {
+    // Regression for D4: this used to throw nlohmann type_error.316 (a lone
+    // byte of a multi-byte character is invalid UTF-8), which crossed the WASM
+    // boundary as an opaque exception.
+    std::string raw;
+    REQUIRE_NOTHROW(raw = runPipelineJson(std::string("caf\xC3\xA9"), "a"));
+    json j = json::parse(raw);
+
+    REQUIRE(j["ok"].get<bool>() == false);
+    REQUIRE(j["error"]["type"].get<std::string>() == "UnexpectedToken");
+    REQUIRE(j["error"]["position"].get<int>() == 3);
+    REQUIRE(j["error"]["expected"].get<std::string>() == "an ASCII character");
+    REQUIRE(j["error"]["found"].get<std::string>() == "non-ASCII character");
+}
+
+TEST_CASE("json_bridge — non-ASCII in the test string alone stays safe", "[json_bridge]") {
+    // Pins current behavior: only the pattern is restricted to ASCII.
+    std::string raw;
+    REQUIRE_NOTHROW(raw = runPipelineJson("a", std::string("\xC3\xA9")));
+    json j = json::parse(raw);
+    REQUIRE(j["ok"].get<bool>() == true);
 }
