@@ -16,7 +16,8 @@
   stroke: var(--bg, #fff);
   stroke-width: 3px;
   stroke-linejoin: round;
-}.state {
+}
+.state {
   fill: white;
   stroke: #333;
   stroke-width: 1.5;
