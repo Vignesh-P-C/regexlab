@@ -19,3 +19,4 @@ build-wasm/
 frontend/public/wasm/*.js
 frontend/public/wasm/*.wasm
 .claude/
+Context/
