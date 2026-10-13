@@ -214,11 +214,11 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 
 | Module | Topic | Coverage | How |
 |---|---|---|---|
-| 1 | Lexical analysis | **Direct, core** | Regex → DFA is the project; `ParserPass` → `ThompsonPass` → `SubsetConstructionPass` implements the syllabus's own named example (indirect route). The *direct method* (nullable/firstpos/lastpos/followpos) is not built |
+| 1 | Lexical analysis | **Direct, core** | Regex → DFA is the project; `ParserPass` → `ThompsonPass` → `SubsetConstructionPass` implements the syllabus's own named example (indirect route). The *direct method* (nullable/firstpos/lastpos/followpos) is not built yet; it is an optional add-on (issue #43) |
 | 2 | Syntax analysis | **Direct, partial** | Recursive-descent parsing, parse tree (the AST), unambiguous grammar with precedence by call order. The grammar is LL(1)-compatible but the parser is hand-written, not table-driven. No LR/SLR/LALR |
-| 3 | Semantic analysis | Thin | `ParseError` detection is lightweight error checking inside the parser; no attribute grammars or separate semantic pass |
-| 4 | Intermediate code | Real but unconventional | The AST is a syntax tree; the Thompson NFA plays the structural role of an IR between parsing and matching. No three-address code |
-| 5 | Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form, but it is automata theory, not data-flow, loop or peephole optimization |
+| 3 | Semantic analysis | Thin | `ParseError` detection is lightweight error checking inside the parser; no attribute grammars or separate semantic pass. The optional direct-method add-on (#43) would add a real syntax-directed definition with synthesized attributes |
+| 4 | Intermediate code | Real but unconventional | The AST is a syntax tree; the Thompson NFA plays the structural role of an IR between parsing and matching. No three-address code; the optional bytecode add-on (#46) would add a linear intermediate form with backpatching |
+| 5 | Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form, but it is automata theory, not data-flow, loop or peephole optimization. Optional add-ons would add algebraic simplification (#45) and basic blocks, a control-flow graph and a VM-code verifier (#46) |
 | 6 | Code generation | Real, specific | `MatcherPass` turns the min-DFA into an executable matching procedure; C++ → WASM is a second, literal code-generation step. No registers or activation records |
 | 7 | Parallelism | Not covered | Nothing in a regex engine naturally exercises this; stated plainly rather than forced |
 | 8 | Contemporary issues | Not assessed | — |
@@ -238,11 +238,12 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 | `pipeline.cpp` + JSON bridge | ✅ Complete — carries every stage (AST, NFA, DFA, min-DFA, trace) | Pending explain-it-back checkpoint |
 | Differential testing | ✅ Complete in both languages (`std::regex` and native `RegExp` oracles) | Pending explain-it-back checkpoint |
 | WASM binding (Emscripten) | ✅ Complete — builds, ES-module output verified, limits probed by `scripts/check-wasm-limits.mjs` | — |
-| Visualizer | ✅ Working end to end in a browser (AST tree + NFA/DFA/min-DFA graphs with match-trace playback). 🔄 Polish (animation, responsive layout, input-length UX) in review | — |
+| Visualizer | ✅ Working end to end in a browser (AST tree + NFA/DFA/min-DFA graphs with match-trace playback); polish merged (animation, layered responsive layout, input-length UX). Manual 360px and theme QA tracked in #41 | — |
 | Contract freeze (`docs/data-contracts.md`) | 📋 Not started (issue #16) | — |
 | AI suggestion layer + hard gate | 📋 Not started — design decision pending (issues #19–#21) | — |
 | CI + deployment | 📋 Not started (issues #22, #23) | — |
 | Final report | 📋 Not started (issues #26, #27) | — |
+| Optional syllabus add-ons (#43–#47) | 🤔 Proposed, decision pending | — |
 | Hopcroft's / isomorphism testing (Hard Stretch) | 🔒 Locked until Core is done | — |
 
 ## Build Sequence
@@ -317,7 +318,7 @@ npm run dev       # needs regexlab.js / regexlab.wasm in frontend/public/wasm/
 | Phase | Scope | Status |
 |---|---|---|
 | **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests (both languages), WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 In progress — engine, pipeline, differential testing, WASM binding and visualizer done; contract freeze, AI layer, CI/deployment and report remain |
-| **Syllabus-coverage candidates** | LL(1) FIRST/FOLLOW + predictive table; direct-method DFA construction (nullable/firstpos/lastpos/followpos) | 🤔 Under consideration — decision pending; the direct-method pass must land before the contract freeze if chosen |
+| **Optional add-ons for syllabus coverage** | LL(1) FIRST/FOLLOW + predictive table (no issue yet); direct-method DFA via attributes (#43, frontend #44); AST simplifier (#45); bytecode backend with backpatching, VM matcher and verifier (#46, frontend #47) | 🤔 Proposed, decision pending — whichever are kept that change the JSON contract (#43, #45, #46) must land before the contract freeze (#16) |
 | **Stretch A** | `+`, `?` quantifiers | 📋 Planned — cheap once `*` works |
 | **Stretch B** | `[a-z]` character classes | 📋 Planned — if time remains after Core is demo-ready |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | 🔒 Gated — only after Core is finished *and* both teammates can explain differential testing and Moore's minimization without notes |
