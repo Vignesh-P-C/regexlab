@@ -1,5 +1,20 @@
 import type { ParseError } from "../types/engine";
 
+// Mirrors DEFAULT_MAX_PATTERN_LENGTH in engine/passes/parser-pass.ts (issue #29).
+// Deliberately NOT enforced with maxLength: a silently truncated paste would
+// match a different pattern. The engine reports PatternTooComplex instead.
+const MAX_PATTERN_LENGTH = 500;
+
+function Counter({ length, max }: { length: number; max: number }) {
+  const cls =
+    length > max ? "char-counter over-limit" : length >= max * 0.9 ? "char-counter near-limit" : "char-counter";
+  return (
+    <small className={cls}>
+      {length} / {max}
+    </small>
+  );
+}
+
 type Props = {
   pattern: string;
   input: string;
@@ -20,6 +35,10 @@ export function PatternInput({ pattern, input, onPatternChange, onInputChange, e
           placeholder="(a|b)*ab"
           spellCheck={false}
         />
+        <span className="field-meta">
+          <small>ASCII only, max {MAX_PATTERN_LENGTH} characters</small>
+          <Counter length={pattern.length} max={MAX_PATTERN_LENGTH} />
+        </span>
       </label>
       <label>
         Test string
