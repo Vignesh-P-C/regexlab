@@ -47,7 +47,9 @@ function App() {
 
   const activeStates =
     snapshot && snapshot.ok && activeStage === "minDfa"
-      ? snapshot.trace.steps[activeStep]?.activeStates ?? [snapshot.minDfa.startState]
+      ? activeStep === 0
+        ? [snapshot.minDfa.startState] // position 0 = before any input is read
+        : snapshot.trace.steps[activeStep - 1]?.activeStates ?? []
       : [];
 
   return (
@@ -71,7 +73,8 @@ function App() {
           <PlaybackControls
             activeStage={activeStage}
             onStageChange={setActiveStage}
-            stepCount={snapshot.trace.steps.length}
+            // one position for the start state, then one per character read
+            stepCount={snapshot.trace.steps.length + 1}
             activeStep={activeStep}
             onStepChange={setActiveStep}
           />

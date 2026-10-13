@@ -8,10 +8,12 @@ type Props = {
 };
 
 const WIDTH = 640;
-const HEIGHT = 420;
 const NODE_R = 20;
 
 type Point = { x: number; y: number };
+/** The engine calls the empty transition "eps"; draw it as the textbook symbol. */
+const symbolLabel = (symbol: string) => (symbol === "eps" ? "ε" : symbol);
+
 type GraphEdge = { from: number; to: number; symbols: string[] };
 
 /**
@@ -71,24 +73,104 @@ function edgeGeometry(a: Point, b: Point, curve: number) {
   return { start, end, ctrl, label };
 }
 
-/** States laid out on a circle; transitions as labeled arrows, self-loops as small arcs. */
-function AutomatonGraph({ automaton, activeStates }: { automaton: Automaton; activeStates: number[] }) {
-  const { stateCount, startState, acceptStates, transitions } = automaton;
-  const cx = WIDTH / 2;
-  const cy = HEIGHT / 2;
-  const radius = Math.min(WIDTH, HEIGHT) / 2 - 60;
+// #25: layered left-to-right layout. A state's column is its BFS distance
+// from the start state, so the automaton reads like a flow instead of a hairball.
+const LAYER_GAP = 130; // horizontal distance between columns
+const ROW_GAP = 100; // vertical distance between states in one column
+const MARGIN_X = 70; // room on the left for the start arrow
+const MARGIN_Y = 70; // room above the top row for self-loops
+const MIN_GRAPH_HEIGHT = 300;
+const MIN_GRAPH_SCALE = 0.7; // below this the graph scrolls instead of shrinking
+const BOW_STEPS = [70, 110, 150, 190, 230, 270]; // control-point offsets tried, smallest first
+const CLEARANCE = NODE_R + 10; // an edge must stay this far from any other state
 
-  const positions = Array.from({ length: stateCount }, (_, i) => {
-    const angle = (2 * Math.PI * i) / Math.max(stateCount, 1) - Math.PI / 2;
-    return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
-  });
+type Layout = { positions: Point[]; layer: number[]; width: number; height: number };
 
-  const activeSet = new Set(activeStates);
+/**
+ * Back edges and layer-skipping edges would run straight through the states
+ * between their ends, so give them a bow. Try the smallest bow first, on the
+ * preferred side, then the other side, then a bigger bow, and keep the first
+ * one that clears every other state. `signs` lists the curve signs allowed.
+ */
+function clearCurve(a: Point, b: Point, ends: number[], positions: Point[], signs: number[]): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const nx = -dy / dist;
+  const ny = dx / dist;
+  for (const bow of BOW_STEPS) {
+    for (const sign of signs) {
+      const curve = sign * bow;
+      const cx = (a.x + b.x) / 2 + nx * curve;
+      const cy = (a.y + b.y) / 2 + ny * curve;
+      let clear = true;
+      for (let t = 0.1; t <= 0.9 && clear; t += 0.05) {
+        const px = (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * cx + t * t * b.x;
+        const py = (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * cy + t * t * b.y;
+        positions.forEach((q, id) => {
+          if (!ends.includes(id) && Math.hypot(px - q.x, py - q.y) < CLEARANCE) clear = false;
+        });
+      }
+      if (clear) return curve;
+    }
+  }
+  return signs[0] * BOW_STEPS[BOW_STEPS.length - 1];
+}
+
+function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[]): Layout {
+  const next = new Map<number, number[]>();
+  for (const e of edges) next.set(e.from, [...(next.get(e.from) ?? []), e.to]);
+
+  // Breadth-first search from the start state: layer[s] = fewest edges from start to s.
+  const layer = new Array<number>(stateCount).fill(-1);
+  layer[startState] = 0;
+  const queue = [startState];
+  for (let head = 0; head < queue.length; head++) {
+    const s = queue[head];
+    for (const t of next.get(s) ?? []) {
+      if (layer[t] === -1) {
+        layer[t] = layer[s] + 1;
+        queue.push(t);
+      }
+    }
+  }
+  // Defensive: a state with no path from the start gets its own last column.
+  const lastReached = Math.max(0, ...layer);
+  for (let i = 0; i < stateCount; i++) if (layer[i] === -1) layer[i] = lastReached + 1;
+
+  const columns = Math.max(0, ...layer) + 1;
+  const rows: number[][] = Array.from({ length: columns }, () => []);
+  for (let i = 0; i < stateCount; i++) rows[layer[i]].push(i);
+
+  const tallest = Math.max(1, ...rows.map((r) => r.length));
+  const width = Math.max(WIDTH, 2 * MARGIN_X + (columns - 1) * LAYER_GAP);
+  const height = Math.max(MIN_GRAPH_HEIGHT, 2 * MARGIN_Y + (tallest - 1) * ROW_GAP);
+
+  const positions: Point[] = new Array(stateCount);
+  for (const row of rows) {
+    row.forEach((id, i) => {
+      positions[id] = {
+        x: MARGIN_X + layer[id] * LAYER_GAP,
+        y: height / 2 + (i - (row.length - 1) / 2) * ROW_GAP,
+      };
+    });
+  }
+  return { positions, layer, width, height };
+}
+
+/** States in BFS layers, left to right; transitions as labeled arrows, self-loops as small arcs. */function AutomatonGraph({ automaton, activeStates }: { automaton: Automaton; activeStates: number[] }) {
+    const { stateCount, startState, acceptStates, transitions } = automaton;
   const edges = groupEdges(transitions);
   const edgeKeys = new Set(edges.map((e) => `${e.from}>${e.to}`));
+  const { positions, layer, width, height } = layeredLayout(stateCount, startState, edges);
+  const activeSet = new Set(activeStates);
 
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="automaton-svg">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="automaton-svg"
+      style={{ minWidth: width * MIN_GRAPH_SCALE }}
+    >
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
@@ -98,26 +180,47 @@ function AutomatonGraph({ automaton, activeStates }: { automaton: Automaton; act
       {edges.map((e) => {
         const a = positions[e.from];
         const b = positions[e.to];
-        const label = e.symbols.join(",");
+        const label = e.symbols.map(symbolLabel).join(",");
         const key = `${e.from}>${e.to}`;
         if (e.from === e.to) {
-          const loopY = a.y - NODE_R - 24;
+          // The loop sits above its state, unless an edge already leaves or enters
+          // from above; then it goes underneath so it can't run along that edge.
+          const neighbours = edges
+            .filter((o) => o.from !== o.to && (o.from === e.from || o.to === e.from))
+            .map((o) => positions[o.from === e.from ? o.to : o.from]);
+          const above = neighbours.some((q) => q.y - a.y < -Math.abs(q.x - a.x) * 0.6);
+          const below = neighbours.some((q) => q.y - a.y > Math.abs(q.x - a.x) * 0.6);
+          const dir = above && !below ? 1 : -1; // 1 = underneath, -1 = above
+          const loopY = a.y + dir * (NODE_R + 24);
           return (
             <g key={key}>
               <path
-                d={`M ${a.x - 8} ${a.y - NODE_R} Q ${a.x} ${loopY} ${a.x + 8} ${a.y - NODE_R}`}
+                d={`M ${a.x - 8} ${a.y + dir * NODE_R} Q ${a.x} ${loopY} ${a.x + 8} ${a.y + dir * NODE_R}`}
                 fill="none"
                 stroke="currentColor"
                 markerEnd="url(#arrow)"
               />
-              <text x={a.x} y={loopY - 4} textAnchor="middle" fontSize="12" className="edge-label">
+              <text x={a.x} y={dir === 1 ? loopY + 14 : loopY - 4} textAnchor="middle" fontSize="12" className="edge-label">
                 {label}
               </text>
             </g>
           );
         }
         const twoWay = edgeKeys.has(`${e.to}>${e.from}`);
-        const g = edgeGeometry(a, b, twoWay ? PAIR_CURVE : 0);
+        // Column distance: negative = back edge, > 1 = skips a column. Both would
+        // otherwise run straight through the states in between, so they bow out.
+        const span = layer[e.to] - layer[e.from];
+        const skips = span < 0 || span > 1;
+        // Back edges bow down, forward skips bow up (a positive curve bows down
+        // for a rightward edge and up for a leftward one).
+        const wantDown = span < 0;
+        const prefer = (b.x - a.x >= 0 ? 1 : -1) * (wantDown ? 1 : -1);
+        const curve = !skips
+          ? twoWay ? PAIR_CURVE : 0
+          : twoWay
+            ? clearCurve(a, b, [e.from, e.to], positions, [1])
+            : clearCurve(a, b, [e.from, e.to], positions, [prefer, -prefer]);
+        const g = edgeGeometry(a, b, curve);
         return (
           <g key={key}>
             <path
@@ -138,8 +241,8 @@ function AutomatonGraph({ automaton, activeStates }: { automaton: Automaton; act
           {id === startState && (
             <line x1={p.x - NODE_R - 24} y1={p.y} x2={p.x - NODE_R} y2={p.y} stroke="currentColor" markerEnd="url(#arrow)" />
           )}
-          <circle cx={p.x} cy={p.y} r={NODE_R} className={activeSet.has(id) ? "state active" : "state"} />
-          {acceptStates.includes(id) && <circle cx={p.x} cy={p.y} r={NODE_R - 4} fill="none" stroke="currentColor" />}
+          <circle cx={p.x} cy={p.y} r={NODE_R} className={`state${acceptStates.includes(id) ? " accept" : ""}${activeSet.has(id) ? " active" : ""}`} />
+          {acceptStates.includes(id) && <circle cx={p.x} cy={p.y} r={NODE_R - 6} className="accept-ring" />}
           <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="13">
             {id}
           </text>
