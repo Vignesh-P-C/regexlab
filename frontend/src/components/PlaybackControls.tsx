@@ -33,7 +33,10 @@ export function PlaybackControls({ activeStage, onStageChange, stepCount, active
         ))}
       </div>
 
-      {stepCount > 0 && (
+      {activeStage !== "minDfa" && stepCount > 1 && (
+        <p className="step-hint">Step playback runs on the min-DFA tab.</p>
+      )}
+      {activeStage === "minDfa" && stepCount > 1 && (
         <div className="step-scrubber">
           <button onClick={() => onStepChange(Math.max(0, activeStep - 1))} disabled={activeStep <= 0}>
             ◀
@@ -51,9 +54,7 @@ export function PlaybackControls({ activeStage, onStageChange, stepCount, active
           >
             ▶
           </button>
-          <span>
-            step {activeStep + 1} / {stepCount}
-          </span>
+          <span>{activeStep === 0 ? "start" : `step ${activeStep} / ${stepCount - 1}`}</span>
         </div>
       )}
     </div>
