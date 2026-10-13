@@ -10,8 +10,23 @@
 .step-scrubber { display: flex; align-items: center; gap: 8px; }
 .automaton-view { border: 1px solid #ddd; border-radius: 8px; overflow: auto; }
 .automaton-svg, .ast-svg { width: 100%; height: auto; }
-.edge-label { paint-order: stroke; stroke: var(--bg, #fff); stroke-width: 3px; stroke-linejoin: round; }
-.state { fill: white; stroke: #333; stroke-width: 1.5; }
+.edge-label {
+  fill: var(--text-h, #000); /* SVG text defaults to black: invisible on the dark-mode halo */
+  paint-order: stroke;
+  stroke: var(--bg, #fff);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.state {
+  fill: white;
+  stroke: #333;
+  stroke-width: 1.5;
+  /* #24: ease the active-state highlight between playback steps */
+  transition: fill 750ms ease, stroke 750ms ease, stroke-width 750ms ease;
+}
 .state.active { fill: #fde68a; stroke: #b45309; stroke-width: 2.5; }
+@media (prefers-reduced-motion: reduce) {
+  .state { transition: none; }
+}
 .ast-node { fill: white; stroke: #333; }
 .suggestion-banner { background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 12px; border-radius: 6px; margin: 12px 0; }
