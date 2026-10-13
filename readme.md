@@ -98,7 +98,7 @@ regexlab/
 │   │   └── passes/*.hpp                      # one header per pass
 │   └── __tests__/
 │       └── unit/                             # ✅ TS golden-value tests, one file per pass
-│                                              # 📋 TS differential/oracle tests not yet started
+│                                             # ✅ TS differential/oracle tests not yet started
 ├── tests/                                    # ✅ C++ Catch2 tests (ported golden values + pipeline + differential)
 │   ├── smoke_test.cpp
 │   ├── parser_pass_test.cpp
@@ -173,8 +173,7 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 | Core engine (production) | C++20, CMake, zero runtime dependencies | Compiles to WebAssembly for in-browser execution — no server, no round-trip; systems-language depth beyond a frontend-only project |
 | Core engine (prototype) | TypeScript, strict mode, zero dependencies | Fast dev loop for validating the algorithms before the C++ port; kept in the repo as the documented design-validation history |
 | Engine tests (C++) | Catch2 v3, fetched via CMake FetchContent | Golden-value tests ported from TS, plus pipeline-equivalence and differential testing against `std::regex` |
-| Engine tests (TS) | Vitest (unit) + fast-check (property-based, planned) | Fast golden-value tests per pass; property/differential testing against a reference oracle — not yet started |
-| WASM bridge | Emscripten | Compiles the C++ engine to a `.wasm` module the frontend calls directly — built and verified |
+| Engine tests (TS) | Vitest (unit + differential) | Fast golden-value tests per pass, plus a seeded differential test against native `RegExp`, anchored `^(?:…)$` for full-match semantics (fast-check was planned but not needed) || WASM bridge | Emscripten | Compiles the C++ engine to a `.wasm` module the frontend calls directly — built and verified |
 | Frontend | React + Vite | Fast dev loop; one component per pipeline stage, driven by pipeline output |
 | Visualization | Hand-rolled SVG | Keeps the "built from scratch" story intact — no charting/graph library |
 | AI proxy | Vercel Edge Function (serverless) | Keeps the AI API key server-side, never shipped to the client — a real, citable backend decision |
