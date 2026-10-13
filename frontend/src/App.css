@@ -16,5 +16,6 @@
 .ast-node { fill: white; stroke: #333; }
 .suggestion-banner { background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 12px; border-radius: 6px; margin: 12px 0; }
 
-.char-counter { font-size: 12px; color: #666; align-self: flex-end; }
-.char-counter.near-limit { color: #b91c1c; font-weight: 600; }
+.field-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text, #666); }
+.char-counter.near-limit { color: #b45309; font-weight: 600; }
+.char-counter.over-limit { color: #b91c1c; font-weight: 700; }
