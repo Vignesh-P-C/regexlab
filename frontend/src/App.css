@@ -6,8 +6,8 @@
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text-h);
 }
 .pattern-input input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.parse-error { width: 100%; color: #b91c1c; font-size: 13px; }
-.engine-error { color: #b91c1c; }
+.parse-error { width: 100%; color: var(--error); font-size: 13px; }
+.engine-error { color: var(--error); }
 .playback-controls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .stage-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .stage-tabs button {
@@ -50,5 +50,5 @@
 .suggestion-banner { background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 12px; border-radius: 6px; margin: 12px 0; }
 
 .field-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text, #666); }
-.char-counter.near-limit { color: #b45309; font-weight: 600; }
-.char-counter.over-limit { color: #b91c1c; font-weight: 700; }
+.char-counter.near-limit { color: var(--warning); font-weight: 600; }
+.char-counter.over-limit { color: var(--error); font-weight: 700; }
