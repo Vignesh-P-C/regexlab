@@ -17,11 +17,14 @@ namespace regexlab {
  * (parser, AST destructor, Thompson, minimization) bounded; both report
  * through the ordinary ParseError path (PatternTooComplex), never a crash.
  *
+ * The length cap applies only to an all-ASCII prefix, so that both engines
+ * measure the same unit — see exceedsLengthCap in parser-pass.cpp.
+ *
  * Production code uses the defaults. The parameter exists so tests can lift
- * one limit to exercise the other: with the default 500-char length cap a
- * pattern can nest at most 499 levels, so the depth guard is unreachable
- * through default limits (it stays as defense in depth if the length cap is
- * ever raised, e.g. after a faster minimization algorithm lands).
+ * one limit to exercise the other: under default limits the parser never
+ * consumes more than 500 units, so it can nest at most 500 levels and the
+ * depth guard is unreachable (it stays as defense in depth if the length cap
+ * is ever raised, e.g. after a faster minimization algorithm lands).
  */
 constexpr int kDefaultMaxPatternLength = 500;
 constexpr int kDefaultMaxNestingDepth = 1000;

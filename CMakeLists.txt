@@ -65,9 +65,16 @@ add_executable(engine_tests
     tests/pipeline_test.cpp
     tests/differential_test.cpp
     tests/json_bridge_test.cpp
+    tests/parser_cases_fixture_test.cpp
 )
 target_link_libraries(engine_tests PRIVATE regexlab_engine Catch2::Catch2WithMain)
 target_compile_options(engine_tests PRIVATE ${REGEXLAB_WARNING_FLAGS})
+# Absolute path to the shared parity fixture, so the test finds it regardless
+# of the working directory ctest launches it from. The TS half of the same
+# fixture resolves its path relative to the test file instead.
+target_compile_definitions(engine_tests PRIVATE
+    REGEXLAB_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+)
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)

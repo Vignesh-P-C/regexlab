@@ -41,9 +41,10 @@ class ParseFailure extends Error {
 /**
  * Safety limits on what the parser will accept. Mirrors ParseLimits in
  * parser-pass.hpp. Production code uses the defaults; the parameter exists
- * so tests can lift one limit to exercise the other (with the default
- * 500-char length cap a pattern nests at most 499 levels, so the depth guard
- * is unreachable through default limits and is kept as defense in depth).
+ * so tests can lift one limit to exercise the other (under default limits the
+ * parser never consumes more than maxPatternLength units — see
+ * exceedsLengthCap — so the depth guard is unreachable and is kept as
+ * defense in depth).
  */
 export const DEFAULT_MAX_PATTERN_LENGTH = 500;
 export const DEFAULT_MAX_NESTING_DEPTH = 1000;
@@ -65,7 +66,8 @@ class Parser {
   //  - maxPatternLength: the depth guard only counts '(', but long chains of
   //    plain concatenation/alternation build equally deep ASTs (depth =
   //    pattern length). 500 is sized from measurements (see issue #29 and
-  //    the comment in parser-pass.cpp).
+  //    the comment in parser-pass.cpp). It applies to an all-ASCII prefix
+  //    only — see exceedsLengthCap for why.
 
   private pos = 0;
   private depth = 0;
@@ -102,6 +104,36 @@ class Parser {
       node = { kind: "concat", left: node, right };
     }
     return node;
+  }
+
+  /**
+   * Does the length cap apply to this pattern?
+   *
+   * The cap counts units, and the two engines count different ones: TS counts
+   * UTF-16 code units, C++ counts UTF-8 bytes. Comparing a raw length against
+   * the cap therefore diverged on non-ASCII input — "é" x 300 is 300 units but
+   * 600 bytes, so TS parsed it and C++ called it too long (issue #36).
+   *
+   * The fix is to apply the cap only to an all-ASCII prefix. Inside such a
+   * prefix one unit is exactly one byte, so both engines measure the same
+   * thing and the divergence disappears by construction.
+   *
+   * Skipping the cap is safe: positions 0..cap are then known to contain a
+   * non-ASCII unit, and requireAscii rejects the first one the parser reaches,
+   * so at most `cap` units are ever consumed and recursion stays bounded no
+   * matter how long the rest of the pattern is. Verified in both engines for
+   * literals, groups and escapes.
+   *
+   * Mirrors exceedsLengthCap in parser-pass.cpp.
+   */
+  private exceedsLengthCap(): boolean {
+    const cap = this.limits.maxPatternLength;
+    if (this.pattern.length <= cap) return false;
+    // pattern.length > cap, so indices 0..cap all exist.
+    for (let i = 0; i <= cap; i++) {
+      if (this.pattern.charCodeAt(i) > 0x7f) return false;
+    }
+    return true;
   }
 
   /**
@@ -224,7 +256,7 @@ class Parser {
 
   parse(): ParseResult {
     try {
-      if (this.pattern.length > this.limits.maxPatternLength) {
+      if (this.exceedsLengthCap()) {
         throw new ParseFailure({
           type: "PatternTooComplex",
           position: this.limits.maxPatternLength,
