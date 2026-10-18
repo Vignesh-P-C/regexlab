@@ -214,11 +214,11 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 
 | Module | Topic | Coverage | How |
 |---|---|---|---|
-| 1 | Lexical analysis | **Direct, core** | Regex → DFA is the project; `ParserPass` → `ThompsonPass` → `SubsetConstructionPass` implements the syllabus's own named example (indirect route). The *direct method* (nullable/firstpos/lastpos/followpos) is not built yet; it is an optional add-on (issue #43) |
+| 1 | Lexical analysis | **Direct, core** | Regex → DFA is the project; `ParserPass` → `ThompsonPass` → `SubsetConstructionPass` implements the syllabus's own named example (indirect route). The *direct method* (nullable/firstpos/lastpos/followpos) is not built; proposed issues #43/#44 were closed as out of scope |
 | 2 | Syntax analysis | **Direct, partial** | Recursive-descent parsing, parse tree (the AST), unambiguous grammar with precedence by call order. The grammar is LL(1)-compatible but the parser is hand-written, not table-driven. No LR/SLR/LALR |
-| 3 | Semantic analysis | Thin | `ParseError` detection is lightweight error checking inside the parser; no attribute grammars or separate semantic pass. The optional direct-method add-on (#43) would add a real syntax-directed definition with synthesized attributes |
-| 4 | Intermediate code | Real but unconventional | The AST is a syntax tree; the Thompson NFA plays the structural role of an IR between parsing and matching. No three-address code; the optional bytecode add-on (#46) would add a linear intermediate form with backpatching |
-| 5 | Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form, but it is automata theory, not data-flow, loop or peephole optimization. Optional add-ons would add algebraic simplification (#45) and basic blocks, a control-flow graph and a VM-code verifier (#46) |
+| 3 | Semantic analysis | Thin | `ParseError` detection is lightweight error checking inside the parser; no attribute grammars or separate semantic pass. The direct-method proposal (#43/#44), which included attributes, was closed as out of scope |
+| 4 | Intermediate code | Real but unconventional | The AST is a syntax tree; the Thompson NFA plays the structural role of an IR between parsing and matching. No three-address code; the bytecode proposal (#46/#47) was closed as out of scope |
+| 5 | Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form, but it is automata theory, not data-flow, loop or peephole optimization. The AST simplifier (#45) remains an open, undecided optional issue; the bytecode proposal (#46/#47) was closed as out of scope |
 | 6 | Code generation | Real, specific | `MatcherPass` turns the min-DFA into an executable matching procedure; C++ → WASM is a second, literal code-generation step. No registers or activation records |
 | 7 | Parallelism | Not covered | Nothing in a regex engine naturally exercises this; stated plainly rather than forced |
 | 8 | Contemporary issues | Not assessed | — |
@@ -243,7 +243,7 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 | AI suggestion layer + hard gate | 📋 Not started — design decision pending (issues #19–#21) | — |
 | CI + deployment | 📋 Not started (issues #22, #23) | — |
 | Final report | 📋 Not started (issues #26, #27) | — |
-| Optional syllabus add-ons (#43–#47) | 🤔 Proposed, decision pending | — |
+| Optional AST simplifier (#45) | 🤔 Open; decision pending. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope; the LL(1) table is an untracked idea and is not currently planned | — |
 | Hopcroft's / isomorphism testing (Hard Stretch) | 🔒 Locked until Core is done | — |
 
 ## Build Sequence
@@ -318,7 +318,7 @@ npm run dev       # needs regexlab.js / regexlab.wasm in frontend/public/wasm/
 | Phase | Scope | Status |
 |---|---|---|
 | **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests (both languages), WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 In progress — engine, pipeline, differential testing, WASM binding and visualizer done; contract freeze, AI layer, CI/deployment and report remain |
-| **Optional add-ons for syllabus coverage** | LL(1) FIRST/FOLLOW + predictive table (no issue yet); direct-method DFA via attributes (#43, frontend #44); AST simplifier (#45); bytecode backend with backpatching, VM matcher and verifier (#46, frontend #47) | 🤔 Proposed, decision pending — whichever are kept that change the JSON contract (#43, #45, #46) must land before the contract freeze (#16) |
+| **Remaining optional syllabus item** | AST simplifier (#45); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope | 🤔 #45 remains open and undecided. If taken forward and its simplified-AST output adds JSON fields, settle that before contract freeze (#16) |
 | **Stretch A** | `+`, `?` quantifiers | 📋 Planned — cheap once `*` works |
 | **Stretch B** | `[a-z]` character classes | 📋 Planned — if time remains after Core is demo-ready |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | 🔒 Gated — only after Core is finished *and* both teammates can explain differential testing and Moore's minimization without notes |
