@@ -7,11 +7,12 @@
  * table, so any divergence between the two engines fails one side and not the
  * other instead of going unnoticed.
  *
- * Why a shared file rather than two hand-written suites: PR #32 added the
- * 500-unit cap to both parsers, but TS measured UTF-16 code units while C++
- * measured UTF-8 bytes, so "é" x 300 was accepted by one and rejected by the
- * other. Nothing failed, because no test compared the two. This file is that
- * comparison (issue #36).
+ * Why a shared file rather than two hand-written suites: the 500-unit cap
+ * (issue #29, implemented in PR #33) and the ASCII-only rule (issue #30)
+ * produced different error paths for "é" x 300. TS passed its length check
+ * then returned UnexpectedToken@0; the old C++ byte check returned
+ * PatternTooComplex@500 before parsing. No shared test compared those
+ * outcomes; this fixture now pins the cross-engine behavior.
  *
  * The existing golden suites stay as they are; this adds a layer, it does not
  * replace one.

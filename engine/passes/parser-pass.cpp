@@ -98,8 +98,10 @@ private:
      * The cap counts units, and the two engines count different ones: C++
      * counts UTF-8 bytes, TS counts UTF-16 code units. Comparing a raw length
      * against the cap therefore diverged on non-ASCII input — "\xC3\xA9" x 300
-     * is 600 bytes but 300 units, so C++ called it too long and TS parsed it
-     * (issue #36).
+     * is 600 bytes but 300 units: TS passed the length check then returned
+     * UnexpectedToken@0, while the old C++ byte check returned
+     * PatternTooComplex@500 before parsing (length cap: issue #29 / PR #33;
+     * ASCII-only rule: issue #30).
      *
      * The fix is to apply the cap only to an all-ASCII prefix. Inside such a
      * prefix one byte is exactly one unit, so both engines measure the same

@@ -99,8 +99,11 @@ regexlab/
 │   │   └── passes/*.hpp                      # one header per pass
 │   └── __tests__/
 │       ├── unit/                             # ✅ TS golden-value tests, one file per pass
+│       ├── parity/parser-cases.test.ts       # ✅ TS half of the shared C++/TS parser parity fixture
 │       └── differential.test.ts              # ✅ TS differential test vs native RegExp (anchored full-match), 2000 cases/run
 ├── tests/                                    # ✅ C++ Catch2 tests (golden values, pipeline, json bridge, differential)
+│   ├── fixtures/parser-cases.json           # ✅ Shared parser parity cases for TypeScript and C++
+│   ├── parser_cases_fixture_test.cpp        # ✅ C++ half of the shared parser parity fixture
 │   ├── smoke_test.cpp
 │   ├── parser_pass_test.cpp
 │   ├── thompson_pass_test.cpp

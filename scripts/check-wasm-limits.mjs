@@ -89,7 +89,7 @@ check("emoji in pattern", "a\u{1F600}", "a", "UnexpectedToken@1");
 check("non-ASCII after a syntax error", ")\u00e9", "a", "DanglingOperator@0");
 check("non-ASCII input only", "a", "\u00e9", "ok no-match");
 
-console.log("\n-- issue #36: the length cap applies only to an all-ASCII prefix --");
+console.log("\n-- length-cap parity probes (issue #29, PR #33; ASCII-only rule #30) --");
 check("escaped non-ASCII", "a\\\u00e9", "a", "UnexpectedToken@2");
 check("non-ASCII at 499 then long ASCII tail", "a".repeat(499) + "\u00e9" + "a".repeat(50000), "a", "UnexpectedToken@499");
 check("crossover e-acute x300", "\u00e9".repeat(300), "a", "UnexpectedToken@0");

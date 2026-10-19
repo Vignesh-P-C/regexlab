@@ -112,7 +112,9 @@ class Parser {
    * The cap counts units, and the two engines count different ones: TS counts
    * UTF-16 code units, C++ counts UTF-8 bytes. Comparing a raw length against
    * the cap therefore diverged on non-ASCII input — "é" x 300 is 300 units but
-   * 600 bytes, so TS parsed it and C++ called it too long (issue #36).
+   * 600 bytes: TS passed the length check then returned UnexpectedToken@0,
+   * while the old C++ byte check returned PatternTooComplex@500 before parsing
+   * (length cap: issue #29 / PR #33; ASCII-only rule: issue #30).
    *
    * The fix is to apply the cap only to an all-ASCII prefix. Inside such a
    * prefix one unit is exactly one byte, so both engines measure the same

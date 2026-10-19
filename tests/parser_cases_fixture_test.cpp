@@ -6,11 +6,12 @@
 // same table, so any divergence between the two engines fails one side and not
 // the other instead of going unnoticed.
 //
-// Why a shared file rather than two hand-written suites: PR #32 added the
-// 500-unit cap to both parsers, but C++ measured UTF-8 bytes while TS measured
-// UTF-16 code units, so a 300-character accented pattern was rejected by one
-// and accepted by the other. Nothing failed, because no test compared the two.
-// This file is that comparison (issue #36).
+// Why a shared file rather than two hand-written suites: the 500-unit cap
+// (issue #29, implemented in PR #33) and the ASCII-only rule (issue #30)
+// produced different error paths for a 300-character accented pattern. TS
+// passed its length check then returned UnexpectedToken@0; the old C++ byte
+// check returned PatternTooComplex@500 before parsing. This fixture now pins
+// parity for those outcomes.
 //
 // REGEXLAB_FIXTURES_DIR is injected by CMakeLists.txt so the test finds the
 // fixture no matter which directory ctest runs it from.
