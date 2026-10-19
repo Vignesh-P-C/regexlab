@@ -7,7 +7,6 @@ type Props = {
   activeStates: number[]; // from MatchTrace.steps[activeStep], applies only to minDfa
 };
 
-const WIDTH = 640;
 const NODE_R = 20;
 
 type Point = { x: number; y: number };
@@ -79,8 +78,7 @@ const LAYER_GAP = 130; // horizontal distance between columns
 const ROW_GAP = 100; // vertical distance between states in one column
 const MARGIN_X = 70; // room on the left for the start arrow
 const MARGIN_Y = 70; // room above the top row for self-loops
-const MIN_GRAPH_HEIGHT = 300;
-const MIN_GRAPH_SCALE = 0.7; // below this the graph scrolls instead of shrinking
+const MIN_GRAPH_SCALE = 0.92; // below this the graph scrolls instead of shrinking (keeps 12px edge labels >= 11px)
 const BOW_STEPS = [70, 110, 150, 190, 230, 270]; // control-point offsets tried, smallest first
 const CLEARANCE = NODE_R + 10; // an edge must stay this far from any other state
 
@@ -143,8 +141,11 @@ function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[
   for (let i = 0; i < stateCount; i++) rows[layer[i]].push(i);
 
   const tallest = Math.max(1, ...rows.map((r) => r.length));
-  const width = Math.max(WIDTH, 2 * MARGIN_X + (columns - 1) * LAYER_GAP);
-  const height = Math.max(MIN_GRAPH_HEIGHT, 2 * MARGIN_Y + (tallest - 1) * ROW_GAP);
+  // Sized from content alone (margins already include self-loop/arrow
+  // clearance) -- no floor, so small automatons aren't padded into an
+  // oversized canvas they then have to be shrunk back out of.
+  const width = 2 * MARGIN_X + (columns - 1) * LAYER_GAP;
+  const height = 2 * MARGIN_Y + (tallest - 1) * ROW_GAP;
 
   const positions: Point[] = new Array(stateCount);
   for (const row of rows) {
@@ -169,7 +170,7 @@ function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[
     <svg
       viewBox={`0 0 ${width} ${height}`}
       className="automaton-svg"
-      style={{ minWidth: width * MIN_GRAPH_SCALE }}
+      style={{ minWidth: width * MIN_GRAPH_SCALE, maxWidth: width }}
     >
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -252,10 +253,9 @@ function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[
   );
 }
 
-const MIN_AST_HEIGHT = 160;
 // Large trees stop shrinking to fit at this fraction of natural size and
-// scroll inside the view instead, so nodes stay legible.
-const MIN_AST_SCALE = 0.5;
+// scroll inside the view instead, so nodes stay legible (>= 11px at the 13px base).
+const MIN_AST_SCALE = 0.85;
 
 type Positioned = { node: ASTNode; x: number; y: number; children: Positioned[] };
 
@@ -284,10 +284,11 @@ function AstTree({ node }: { node: ASTNode }) {
   }
 
   const root = layout(node, 0);
-  const width = Math.max(WIDTH, nextLeafX * LEAF_SPACING + 80);
-  // Height follows the tree's depth (D7): a fixed height clipped any tree
-  // deeper than 5 levels. 40px margin above the root and below the deepest row.
-  const height = Math.max(MIN_AST_HEIGHT, 80 + maxDepth * LEVEL_HEIGHT);
+  // Sized from content alone, no floor (D7 already made height follow tree
+  // depth instead of a fixed box; this removes the matching width floor so
+  // small trees aren't padded into a canvas they then have to shrink out of).
+  const width = nextLeafX * LEAF_SPACING + 80;
+  const height = 80 + maxDepth * LEVEL_HEIGHT;
 
   const nodes: Positioned[] = [];
   const edges: { from: Positioned; to: Positioned }[] = [];
@@ -303,7 +304,7 @@ function AstTree({ node }: { node: ASTNode }) {
     n.kind === "char" ? `'${n.value}'` : n.kind === "concat" ? "\u00b7" : n.kind === "alt" ? "|" : "*";
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="ast-svg" style={{ minWidth: width * MIN_AST_SCALE }}>
+    <svg viewBox={`0 0 ${width} ${height}`} className="ast-svg" style={{ minWidth: width * MIN_AST_SCALE, maxWidth: width }}>
       {edges.map((e, i) => (
         <line key={i} x1={e.from.x} y1={e.from.y} x2={e.to.x} y2={e.to.y} stroke="currentColor" />
       ))}

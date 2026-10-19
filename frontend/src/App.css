@@ -27,7 +27,7 @@
 .state.accept { stroke: #16a34a; stroke-width: 3; }
 .accept-ring { fill: none; stroke: #16a34a; stroke-width: 2; }
 .automaton-view { border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
-.automaton-svg, .ast-svg { width: 100%; height: auto; }
+.automaton-svg, .ast-svg { display: block; width: 100%; height: auto; margin: 0 auto; }
 .edge-label {
   fill: var(--text-h, #000); /* SVG text defaults to black: invisible on the dark-mode halo */
   paint-order: stroke;
