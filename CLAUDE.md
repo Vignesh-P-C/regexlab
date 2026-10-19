@@ -288,8 +288,11 @@ regexlab/
 │   ├── include/regexlab/             # types.hpp, pipeline.hpp, json_bridge.hpp, passes/*.hpp
 │   └── __tests__/
 │       ├── unit/                     # TS golden-value tests, one file per pass
+│       ├── parity/parser-cases.test.ts # shared parser fixture parity: TS half
 │       └── differential.test.ts      # TS differential test vs native RegExp
 ├── tests/                            # C++ Catch2: per-pass tests, pipeline, json_bridge, differential
+│   ├── fixtures/parser-cases.json    # shared parser parity fixture
+│   └── parser_cases_fixture_test.cpp # shared parser fixture parity: C++ half
 ├── scripts/check-wasm-limits.mjs     # probes a built WASM module (acceptance cases + stack-depth robustness)
 ├── frontend/
 │   ├── src/                          # App.tsx, hooks/useRegexEngine.ts, types/engine.ts, components/

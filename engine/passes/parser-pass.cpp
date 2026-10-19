@@ -43,13 +43,14 @@ public:
     //    plain literal costs 0.24s at 500 chars and 0.80s at 1000 (Moore's
     //    minimization is O(n^2)), and every shape hits the JS call-stack
     //    ceiling by ~1500-3000 chars. 500 keeps the worst shape fast with
-    //    ~3x margin under the lowest crash ceiling. See issue #29.
+    //    ~3x margin under the lowest crash ceiling. See issue #29. It applies
+    //    to an all-ASCII prefix only — see exceedsLengthCap for why.
     Parser(const std::string& pattern, const ParseLimits& limits)
         : pattern_(pattern), limits_(limits) {}
 
     ParseResult parse() {
         try {
-            if (pattern_.size() > static_cast<size_t>(limits_.maxPatternLength)) {
+            if (exceedsLengthCap()) {
                 throw ParseFailure(ParseError{
                     ParseErrorType::PatternTooComplex, limits_.maxPatternLength,
                     std::string("pattern length <= ") + std::to_string(limits_.maxPatternLength),
@@ -90,6 +91,39 @@ private:
     }
 
     char advance() { return pattern_[pos_++]; }
+
+    /**
+     * Does the length cap apply to this pattern?
+     *
+     * The cap counts units, and the two engines count different ones: C++
+     * counts UTF-8 bytes, TS counts UTF-16 code units. Comparing a raw length
+     * against the cap therefore diverged on non-ASCII input — "\xC3\xA9" x 300
+     * is 600 bytes but 300 units: TS passed the length check then returned
+     * UnexpectedToken@0, while the old C++ byte check returned
+     * PatternTooComplex@500 before parsing (length cap: issue #29 / PR #33;
+     * ASCII-only rule: issue #30).
+     *
+     * The fix is to apply the cap only to an all-ASCII prefix. Inside such a
+     * prefix one byte is exactly one unit, so both engines measure the same
+     * thing and the divergence disappears by construction.
+     *
+     * Skipping the cap is safe: positions 0..cap are then known to contain a
+     * non-ASCII byte, and requireAscii rejects the first one the parser
+     * reaches, so at most `cap` bytes are ever consumed and recursion stays
+     * bounded no matter how long the rest of the pattern is. Verified in both
+     * engines for literals, groups and escapes.
+     *
+     * Mirrors exceedsLengthCap in parser-pass.ts.
+     */
+    bool exceedsLengthCap() const {
+        const size_t cap = static_cast<size_t>(limits_.maxPatternLength);
+        if (pattern_.size() <= cap) return false;
+        // pattern_.size() > cap, so indices 0..cap all exist.
+        for (size_t i = 0; i <= cap; ++i) {
+            if (static_cast<unsigned char>(pattern_[i]) >= 0x80) return false;
+        }
+        return true;
+    }
 
     /**
      * The engine's alphabet is ASCII (bytes 0x00-0x7F). A byte >= 0x80 is

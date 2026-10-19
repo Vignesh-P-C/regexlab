@@ -32,13 +32,21 @@ if (process.argv[2] === "--child") {
 }
 
 // ---- parent mode ----
+// probe() sends the pattern base64-encoded as one argv entry; keep raw
+// patterns under ~90,000 bytes (Linux per-argument limit is 131,072).
 function probe(pattern, input = "a") {
   const res = spawnSync(
     process.execPath,
     [new URL(import.meta.url).pathname, "--child", wasmJs, Buffer.from(pattern, "utf8").toString("base64"), input],
     { encoding: "utf8", timeout: 10_000 },
   );
-  if (res.error || res.status === null) return { handled: false, text: "TIMEOUT/HANG" };
+  // A genuine hang/timeout kills the child via SIGTERM and sets error.code
+  // to ETIMEDOUT. Any other res.error (e.g. E2BIG from an oversized argv)
+  // means the child never ran at all -- that's a harness problem, not an
+  // engine hang, so it gets its own label instead of being lumped in here.
+  if (res.error && res.error.code === "ETIMEDOUT") return { handled: false, text: "TIMEOUT/HANG" };
+  if (res.error) return { handled: false, text: `HARNESS ERROR: ${res.error.code}` };
+  if (res.status === null) return { handled: false, text: "TIMEOUT/HANG" };
   return { handled: res.status === 0, text: (res.stdout || "").trim() };
 }
 
@@ -80,6 +88,12 @@ check("non-ASCII at start", "\u00e9", "a", "UnexpectedToken@0");
 check("emoji in pattern", "a\u{1F600}", "a", "UnexpectedToken@1");
 check("non-ASCII after a syntax error", ")\u00e9", "a", "DanglingOperator@0");
 check("non-ASCII input only", "a", "\u00e9", "ok no-match");
+
+console.log("\n-- length-cap parity probes (issue #29, PR #33; ASCII-only rule #30) --");
+check("escaped non-ASCII", "a\\\u00e9", "a", "UnexpectedToken@2");
+check("non-ASCII at 499 then long ASCII tail", "a".repeat(499) + "\u00e9" + "a".repeat(50000), "a", "UnexpectedToken@499");
+check("crossover e-acute x300", "\u00e9".repeat(300), "a", "UnexpectedToken@0");
+check("escaped non-ASCII + long tail", "\\\u00e9" + "a".repeat(5000), "a", "UnexpectedToken@1");
 
 const failed = rows.filter((r) => !r.pass);
 console.log(`\n${rows.length - failed.length}/${rows.length} passed`);
