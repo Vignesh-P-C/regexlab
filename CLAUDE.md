@@ -1,6 +1,6 @@
 # RegexLab: Automata Made Visible
 ### CLAUDE.md v3 — Project Brief & Working Agreement
-*Last refreshed: 13 Oct 2026. Supersedes v2. Source-code comments that cite "CLAUDE.md v2 §…" still point at the same section numbers here.*
+*Last refreshed: 14 Oct 2026. Supersedes v2. Source-code comments that cite "CLAUDE.md v2 §…" still point at the same section numbers here.*
 
 > This document is self-contained. Paste it in full into every new Claude chat before asking for help on this project — a fresh Claude session has no memory of earlier sessions and needs this to have complete context. If this file conflicts with an older handoff document or chat, **this file and the code on `main` win**; when in doubt about project state, check §15 and the repo itself.
 >
@@ -12,7 +12,7 @@
 
 ### 0.1 Operating instructions for this Claude session
 
-1. **Don't build ahead of the current phase.** Check the Progress Tracker (§15) before writing any code. If Core isn't fully complete and both students can explain it, do not implement anything under Stretch A/B/Hard Stretch — even if asked directly. Flag it and confirm they're sure, since skipping ahead is the single biggest named risk in this plan (§16). The syllabus-coverage candidates in §11 are a *decision pending between the two teammates* — don't start them until that decision is recorded in §15.
+1. **Don't build ahead of the current phase.** Check the Progress Tracker (§15) before writing any code. If Core isn't fully complete and both students can explain it, do not implement anything under Stretch A/B/Hard Stretch — even if asked directly. Flag it and confirm they're sure, since skipping ahead is the single biggest named risk in this plan (§16). The only open optional add-on issue is #45 (AST simplifier), and it remains undecided; don't start it until that decision is recorded in §15. The direct-method issues (#43/#44) and bytecode issues (#46/#47) were closed as out of scope.
 2. **Prefer clear, well-commented, "textbook" code over clever or terse code.** This will be explained in a viva by two undergraduates, not maintained by a team. An implementation that visibly maps to the algorithm's textbook description beats a compact one every time.
 3. **Always name the algorithm you're implementing or explaining** — Thompson's construction, subset construction (Rabin–Scott), Moore's minimization, etc. — and note that these are the constructions covered in Aho/Lam/Sethi/Ullman's *Compilers: Principles, Techniques, and Tools*, the prescribed textbook for BCSE307L.
 4. **Run an "explain it back" checkpoint after every pass, before moving to the next one.** Ask the student(s) to explain what the pass does and why, in their own words, with no notes and no scrolling back up. If they can't do it cleanly, stay on this pass rather than proceeding.
@@ -37,6 +37,7 @@
 - **Repo:** `github.com/Vignesh-P-C/regexlab` (public). Collaborators: Vignesh (`Vignesh-P-C`, owner) and Ujwal (`ujwal2311`, Write access).
 - **Branch protection on `main`:** changes land only through a pull request that needs an approval; "do not allow bypassing" is on, which applies to the owner too. So every change needs the other teammate's real review.
 - **Branch per issue**, cut from an up-to-date `main`. Commit messages use conventional commits (`feat(frontend): …`, `fix(engine): …`, `docs: …`, `test(engine): …`). Put `Closes #N` in the PR body when a PR finishes an issue.
+- **Before every push or PR:** `git fetch origin`, then check `git log --oneline HEAD..origin/main` is empty (otherwise `git rebase origin/main` and `git push --force-with-lease`), `git diff origin/main...HEAD --name-only` lists only intended files, and `git diff origin/main...HEAD -- .gitignore` is empty unless the change is deliberate.
 - **README rule:** whenever files are added to the repo, update `README.md` (module-structure tree and status tables) in the same change, without waiting to be asked.
 - **Environment:** Windows + WSL2 Ubuntu. Clone and run everything inside the WSL filesystem (`~/regexlab`), never through a `\\wsl.localhost\…` path (`cmd.exe` cannot use UNC working directories). Files copied in from a Windows browser leave `*Zone.Identifier` clutter; clean it before committing: `find ~/regexlab -name "*Zone.Identifier*" -delete`.
 - **`gh` quirks:** `gh auth login` uses the browser flow. If `gh pr edit` fails on this machine's `gh` version, edit the PR body with `gh api -X PATCH repos/Vignesh-P-C/regexlab/pulls/<N> -f body="…"`.
@@ -73,11 +74,11 @@ Deep where the problem domain naturally supports it, absent where it does not. D
 
 | Syllabus module | Coverage | Notes |
 |---|---|---|
-| 1. Lexical analysis | **Direct, core** | Regex → DFA is the syllabus's own named example. Implemented via the *indirect* route (Thompson NFA → subset construction). The *direct method* (nullable/firstpos/lastpos/followpos) is not built (§11) |
+| 1. Lexical analysis | **Direct, core** | Regex → DFA is the syllabus's own named example. Implemented via the *indirect* route (Thompson NFA → subset construction). The *direct method* (nullable/firstpos/lastpos/followpos) is not built; proposed issues #43/#44 were closed as out of scope |
 | 2. Syntax analysis | **Direct, partial** | Recursive-descent parsing, parse tree, unambiguous grammar with precedence by call order. LL(1)-*compatible* but hand-written, not table-driven; no LR/SLR/LALR |
-| 3. Semantic analysis | Thin | `ParseError` detection is lightweight error checking inside the parser; no attribute grammars or separate semantic pass |
-| 4. Intermediate code | Real but unconventional | The AST is a syntax tree; the Thompson NFA plays the structural role of an IR. No three-address code |
-| 5. Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form; it is automata theory, not data-flow/loop/peephole optimization |
+| 3. Semantic analysis | Thin | `ParseError` detection is lightweight error checking inside the parser; no attribute grammars or separate semantic pass. The direct-method proposal (#43/#44), which included attributes, was closed as out of scope |
+| 4. Intermediate code | Real but unconventional | The AST is a syntax tree; the Thompson NFA plays the structural role of an IR. No three-address code; the bytecode proposal (#46/#47) was closed as out of scope |
+| 5. Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form; it is automata theory, not data-flow/loop/peephole optimization. The AST simplifier (#45) remains an open, undecided optional issue; the bytecode proposal (#46/#47) was closed as out of scope |
 | 6. Code generation | Real, specific | `MatcherPass` turns the min-DFA into an executable matching procedure; C++ → WASM is a second, literal code-generation step. No registers or activation records |
 | 7. Parallelism | Not covered | Nothing here naturally exercises it; say so plainly |
 | 8. Contemporary issues | Not assessed | Two lecture hours, not a project deliverable |
@@ -248,7 +249,7 @@ The length cap exists because the nesting guard counts only `(`: a long chain of
 | Phase | Scope | Status |
 |---|---|---|
 | **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests (both languages), WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 Engine, pipeline, differential testing, WASM and visualizer done. Contract freeze, AI layer, CI/deployment and report remain |
-| **Syllabus-coverage candidates** | (a) LL(1) FIRST/FOLLOW + predictive table with an equivalence test against the recursive-descent parser; (b) direct-method DFA construction (`nullable`/`firstpos`/`lastpos`/`followpos`, no NFA) | 🤔 **Decision pending between the teammates.** (b) recurses over the same AST and adds a fifth automaton to the JSON contract, so if chosen it must land *before* the contract freeze (#16). Skipped as not worthwhile: a dead-state-elimination pass (measured: it removes nothing on real pipeline output) and anything claiming parallelism |
+| **Remaining optional syllabus item** | #45 AST simplifier (Module 5); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned | 🤔 #45 remains open and undecided; record a team decision in §15 before starting it. If taken forward and its simplified-AST output adds JSON fields, settle that before contract freeze (#16). Direct-method #43/#44 and bytecode #46/#47 were closed as out of scope |
 | **Stretch A** | `+`, `?` quantifiers | Cheap once `*` works |
 | **Stretch B** | `[a-z]` character classes | If time remains after Core is demo-ready |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | Only if Core is finished *and* both can explain differential testing and Moore's minimization without notes — the two places where AI-assisted speed and genuine understanding are most likely to diverge |
@@ -327,7 +328,7 @@ regexlab/
 
 ## 15. Progress Tracker — update this before every new chat
 
-*As of 13 Oct 2026.* Paste your current version into every new Claude session.
+*As of 14 Oct 2026.* Paste your current version into every new Claude session.
 
 | Component | Status | Both can explain it? | Notes |
 |---|---|---|---|
@@ -342,19 +343,19 @@ regexlab/
 | WASM binding | ✅ | — | Release default; `scripts/check-wasm-limits.mjs` |
 | End-to-end browser verification (#14) | ✅ Closed | — | Three acceptance cases verified |
 | Audit fixes D1–D8 | ✅ Closed | — | Loader (Blob import), Release build, try/catch, 500-char cap, ASCII rule, AST/edge rendering |
-| Visualizer polish (#24, #25, #36) | 🔄 In review | — | Animation + edge-label contrast, layered layout + responsive, length counter (separate PRs); manual 360px/theme QA tracked in #41 |
-| Contract freeze (#16) | 📋 Not started | — | Must land before the AI layer reads `ParseError`; blocked on the §11 direct-method decision |
+| Visualizer polish (#24, #25, #36) | ✅ Merged | — | Animation + edge-label contrast, layered layout + responsive, length counter; manual 360px/theme QA open in #41 |
+| Contract freeze (#16) | 📋 Not started | — | Must land before the AI layer reads `ParseError`; the closed add-ons #43/#44 and #46/#47 no longer block it. If #45 is taken forward and adds snapshot fields, settle and land that change before the freeze |
 | WASM build doc (#17) | 📋 Not started | — | README has working steps; needs independent verification |
 | Explain-it-back session (#18) | 📋 Not started | — | Both teammates; include the guard story and the oracle-anchoring detail |
 | AI suggestion layer (#19–#21) | 📋 Not started | No | #19 decision pending: rule-based vs LLM vs A-then-B |
 | CI (#22), hosting (#23) | 📋 Not started | — | #23 waits on #19 |
 | Final report (#26, #27) | 📋 Not started | — | Include D2/D4 limits, Moore vs Hopcroft, honest `Pass` description |
-| Syllabus-coverage candidates (§11) | 🤔 Decision pending | — | LL(1) table; direct-method pass |
+| Remaining optional syllabus item (§11) | 🤔 Decision pending | — | #45 AST simplifier remains open and undecided. The LL(1) table is an untracked idea, not planned. Issues #43/#44 and #46/#47 were closed as out of scope |
 | Hopcroft's / isomorphism testing (Hard Stretch) | 🔒 Locked | No | |
 
 **Small cleanups still open:** correct the handoff-doc claim that the fuzzer found the original stack overflow (it was a manual bisection probe; the fuzzer's depth ≤ 3 can't reach it); update any doc that still describes only the depth-1000 guard; Ujwal's LinkedIn link in the README (#7).
 
-**Decisions pending between the teammates:** (1) LL(1) table and/or direct-method pass: in or out; (2) AI generator: rule-based, LLM, or A-then-B (#19); (3) Moore's O(n²) as a documented limitation vs Hopcroft later; (4) who owns which remaining issue.
+**Decisions pending between the teammates:** (1) whether to pursue the open AST simplifier issue (#45); the LL(1) table is an untracked idea and is not currently planned; (2) AI generator: rule-based, LLM, or A-then-B (#19); (3) Moore's O(n²) as a documented limitation vs Hopcroft later; (4) who owns which remaining issue.
 
 ---
 
@@ -367,7 +368,7 @@ regexlab/
 | Pathological input crashes the engine or leaves stale UI | Low (mitigated) | Length/depth/ASCII guards in both parsers; Release WASM build; frontend try/catch; `check-wasm-limits.mjs` after every WASM rebuild |
 | SVG layout unreadable on large automata | Low | Layered left-to-right layout and horizontal scroll; length cap bounds size |
 | AI API rate limit or key issue mid-demo | Low | Prefer the rule-based generator (no API); otherwise cache suggestions and keep pre-tested broken patterns ready |
-| Contract drift between TS prototype, C++ and the frontend | Medium | The JSON wire format is the contract; freeze it in #16 before the AI layer consumes it; anything adding fields (e.g. the direct-method automaton) lands first |
+| Contract drift between TS prototype, C++ and the frontend | Medium | The JSON wire format is the contract; freeze it in #16 before the AI layer consumes it; if #45 adds fields to the AST snapshot, that change must land first |
 | PR review bottleneck (branch protection needs the other teammate's approval) | Medium | Keep PRs small and scoped to one issue; agree a review turnaround |
 | **AI-assisted build velocity outpacing genuine understanding** | **Medium–High** | Mandatory explain-it-back after every pass (§0.1, §14); Hard Stretch gated behind demonstrated understanding of Core |
 | **Docs that overstate what's built** (a recurring pattern in this project) | Medium | §0.1 item 10: state only what's been checked, say how; refresh §15 and the README status table with every merge |
