@@ -6,6 +6,8 @@
 // file (engine/wasm/bindings.cpp) so it can be unit-tested natively with
 // Catch2, without needing the Emscripten toolchain at all. The binding
 // file itself ends up being ~5 lines of glue calling straight into this.
+// The canonical shared contract and JSON mapping are documented in
+// docs/data-contracts.md.
 //
 // Uses nlohmann::json, per CLAUDE.md v2 §5: "used ONLY at the pipeline
 // boundary, never inside pass logic." This file IS that boundary —

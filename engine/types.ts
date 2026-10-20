@@ -3,7 +3,9 @@
  *
  * Defined once, up front, so every pass (Parser -> Thompson -> Subset
  * Construction -> Minimization -> Matcher) builds against a stable
- * interface. See CLAUDE.md v2 §7.
+ * interface. The canonical shared contract and JSON mapping are in
+ * docs/data-contracts.md; this file is the TypeScript prototype's in-memory
+ * representation, not the frontend wire shape. See CLAUDE.md v2 §7.
  *
  * ---------------------------------------------------------------------
  * Formal Grammar (CLAUDE.md v2 §6)

@@ -8,6 +8,10 @@
 // any golden test values already confirmed in the TypeScript version carry
 // straight over.
 //
+// Canonical shared contract and JSON mapping: docs/data-contracts.md. This
+// header defines the C++ in-memory representation; the frontend wire shape is
+// serialized separately by json_bridge.cpp.
+//
 // Nothing in this file implements a pass. It only defines the shapes that
 // every pass (ParserPass, ThompsonPass, SubsetConstructionPass,
 // MinimizationPass, MatcherPass) will consume and produce.

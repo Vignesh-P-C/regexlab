@@ -1,5 +1,5 @@
-// Mirrors the JSON contract in engine/include/regexlab/json_bridge.hpp —
-// keep these in sync if that shape changes.
+// Mirrors the JSON contract in engine/include/regexlab/json_bridge.hpp.
+// Canonical shared contract and change procedure: docs/data-contracts.md.
 
 export type ASTNode =
   | { kind: "char"; value: string }
