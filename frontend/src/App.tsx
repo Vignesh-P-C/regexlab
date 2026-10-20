@@ -6,7 +6,7 @@ import { PlaybackControls } from "./components/PlaybackControls";
 import { TestStringStrip } from "./components/TestStringStrip";
 import { useRegexEngine } from "./hooks/useRegexEngine";
 import type { PipelineSnapshot, Stage } from "./types/engine";
-import { computeNfaSteps, computeDfaSteps, computeAstSteps, PLAYBACK_MAX_CHARS, type Step } from "./lib/steps";
+import { computeInputPlaybackSteps, computeAstSteps, PLAYBACK_MAX_CHARS, type Step } from "./lib/steps";
 import { clampStepIndex } from "./lib/playbackIndex";
 
 const DEBOUNCE_MS = 150;
@@ -52,19 +52,15 @@ function App() {
   }, [pattern]);
 
   const error = snapshot && !snapshot.ok ? snapshot.error : null;
+  const tooLong = input.length > PLAYBACK_MAX_CHARS;
 
-  const nfaSteps = useMemo<Step[] | null>(
-    () => (snapshot && snapshot.ok ? computeNfaSteps(snapshot.nfa, input) : null),
+  const inputSteps = useMemo(
+    () => (snapshot && snapshot.ok ? computeInputPlaybackSteps(snapshot.nfa, snapshot.dfa, snapshot.minDfa, input) : null),
     [snapshot, input],
   );
-  const dfaSteps = useMemo<Step[] | null>(
-    () => (snapshot && snapshot.ok ? computeDfaSteps(snapshot.dfa, input, snapshot.nfa) : null),
-    [snapshot, input],
-  );
-  const minDfaSteps = useMemo<Step[] | null>(
-    () => (snapshot && snapshot.ok ? computeDfaSteps(snapshot.minDfa, input) : null),
-    [snapshot, input],
-  );
+  const nfaSteps = inputSteps?.nfa ?? null;
+  const dfaSteps = inputSteps?.dfa ?? null;
+  const minDfaSteps = inputSteps?.minDfa ?? null;
   const astSteps = useMemo(() => (snapshot && snapshot.ok ? computeAstSteps(snapshot.ast) : null), [snapshot]);
 
   const activeSteps: Step[] | null =
@@ -88,20 +84,20 @@ function App() {
   };
 
   // #52: min-DFA trusts the engine's own trace result (it actually ran the
-  // compiled matcher); NFA/DFA have no engine trace, so they use steps.ts's
-  // own final-step verdict instead -- the two are proven to agree (PR 1's
-  // per-prefix invariant tests), but min-DFA's displayed verdict should
-  // never depend on the frontend's re-derivation when the engine's own
-  // answer is right there.
+  // compiled matcher); NFA/DFA normally use steps.ts's final-step verdict.
+  // Above the playback cap, no per-character traces are built, so every
+  // input-driven tab uses the engine's overall trace for the verdict.
+  const engineVerdict: "match" | "no-match" | "stuck" | null =
+    snapshot && snapshot.ok
+      ? snapshot.trace.failurePosition !== null
+        ? "stuck"
+        : snapshot.trace.result
+      : null;
   const overallVerdict: "match" | "no-match" | "stuck" | null =
-    activeStage === "minDfa"
-      ? snapshot && snapshot.ok
-        ? snapshot.trace.failurePosition !== null
-          ? "stuck"
-          : snapshot.trace.result
-        : null
-      : activeStage === "ast"
-        ? null
+    activeStage === "ast"
+      ? null
+      : activeStage === "minDfa" || tooLong
+        ? engineVerdict
         : activeSteps
           ? activeSteps[activeSteps.length - 1].verdict === "pending"
             ? null
@@ -112,8 +108,6 @@ function App() {
     if (!snapshot || !snapshot.ok || activeStage === "ast") return null;
     return snapshot[activeStage];
   }, [snapshot, activeStage]);
-
-  const tooLong = input.length > PLAYBACK_MAX_CHARS;
 
   return (
     <div className="app">
@@ -156,7 +150,7 @@ function App() {
             traversedEdges={traversedEdges}
             astNodeIndex={astNodeIndex}
           />
-          {activeStage !== "ast" && overallVerdict && (
+          {activeStage !== "ast" && !tooLong && overallVerdict && (
             <TestStringStrip input={input} steps={activeSteps ?? []} stepIndex={clampedInputIndex} verdict={overallVerdict} />
           )}
           <p className="match-result">

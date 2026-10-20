@@ -215,6 +215,24 @@ export function computeDfaSteps(dfa: Automaton, input: string, nfaForCaption?: A
   return steps;
 }
 
+/** Build the three input-driven visualizer traces only when playback is
+ *  within its UI cap. The engine still processes longer inputs and returns
+ *  the overall verdict; the UI can avoid allocating one Step per character. */
+export function computeInputPlaybackSteps(
+  nfa: Automaton,
+  dfa: Automaton,
+  minDfa: Automaton,
+  input: string,
+): { nfa: Step[]; dfa: Step[]; minDfa: Step[] } | null {
+  if (input.length > PLAYBACK_MAX_CHARS) return null;
+
+  return {
+    nfa: computeNfaSteps(nfa, input),
+    dfa: computeDfaSteps(dfa, input, nfa),
+    minDfa: computeDfaSteps(minDfa, input),
+  };
+}
+
 export type AstStep = { index: number; nodeIndex: number; caption: string };
 
 /**

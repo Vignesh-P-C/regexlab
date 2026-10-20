@@ -27,10 +27,11 @@ export function PlaybackControls({ activeStage, onStageChange, stepCount, active
 
   return (
     <div className="playback-controls">
-      <div className="stage-tabs" role="tablist">
+      <div className="stage-tabs" role="tablist" aria-label="Playback stage">
         {STAGES.map((s) => (
           <button
             key={s.key}
+            type="button"
             role="tab"
             aria-selected={activeStage === s.key}
             className={activeStage === s.key ? "active" : ""}
@@ -46,17 +47,25 @@ export function PlaybackControls({ activeStage, onStageChange, stepCount, active
       ) : (
         stepCount > 1 && (
           <div className="step-scrubber">
-            <button onClick={() => onStepChange(Math.max(0, activeStep - 1))} disabled={activeStep <= 0}>
+            <button
+              type="button"
+              aria-label="Previous step"
+              onClick={() => onStepChange(Math.max(0, activeStep - 1))}
+              disabled={activeStep <= 0}
+            >
               ◀
             </button>
             <input
               type="range"
+              aria-label="Playback step"
               min={0}
               max={stepCount - 1}
               value={activeStep}
               onChange={(e) => onStepChange(Number(e.target.value))}
             />
             <button
+              type="button"
+              aria-label="Next step"
               onClick={() => onStepChange(Math.min(stepCount - 1, activeStep + 1))}
               disabled={activeStep >= stepCount - 1}
             >

@@ -22,7 +22,15 @@ import { match } from "../../../engine/passes/matcher-pass.js";
 import type { Automaton as EngineAutomaton, ASTNode as EngineASTNode } from "../../../engine/types.js";
 
 import type { Automaton as WireAutomaton } from "../types/engine";
-import { computeNfaSteps, computeDfaSteps, computeAstSteps, postOrderAstNodes, PLAYBACK_MAX_CHARS, type Step } from "./steps";
+import {
+  computeNfaSteps,
+  computeDfaSteps,
+  computeInputPlaybackSteps,
+  computeAstSteps,
+  postOrderAstNodes,
+  PLAYBACK_MAX_CHARS,
+  type Step,
+} from "./steps";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -148,6 +156,24 @@ describe("computeNfaSteps / computeDfaSteps -- direct cases (#52)", () => {
     expect(dfaSteps).toHaveLength(PLAYBACK_MAX_CHARS + 1);
     expect(nfaSteps[nfaSteps.length - 1].verdict).toBe("match");
     expect(dfaSteps[dfaSteps.length - 1].verdict).toBe("match");
+  });
+});
+
+describe("computeInputPlaybackSteps -- UI playback cap (#52)", () => {
+  it("builds the input traces at the cap", () => {
+    const { nfa, dfa, minDfa } = buildAll("a*");
+    const steps = computeInputPlaybackSteps(nfa, dfa, minDfa, "a".repeat(PLAYBACK_MAX_CHARS));
+
+    expect(steps).not.toBeNull();
+    expect(steps?.nfa).toHaveLength(PLAYBACK_MAX_CHARS + 1);
+    expect(steps?.dfa).toHaveLength(PLAYBACK_MAX_CHARS + 1);
+    expect(steps?.minDfa).toHaveLength(PLAYBACK_MAX_CHARS + 1);
+  });
+
+  it("does not build per-character traces above the cap", () => {
+    const { nfa, dfa, minDfa } = buildAll("a*");
+
+    expect(computeInputPlaybackSteps(nfa, dfa, minDfa, "a".repeat(PLAYBACK_MAX_CHARS + 1))).toBeNull();
   });
 });
 
