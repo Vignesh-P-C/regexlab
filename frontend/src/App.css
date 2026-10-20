@@ -24,9 +24,14 @@
 }
 .step-scrubber button:disabled { opacity: 0.4; cursor: default; }
 .step-hint { margin: 0; font-size: 13px; color: var(--text); }
+.step-caption { margin: 0; font-size: 13px; color: var(--text); min-height: 1.2em; }
 .state.accept { stroke: #16a34a; stroke-width: 3; }
 .accept-ring { fill: none; stroke: #16a34a; stroke-width: 2; }
 .automaton-view { border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+/* #52: the path/edge actually taken to reach the current playback step --
+   reuses --accent (already used for the active stage tab), plus a
+   stroke-width bump so the highlight isn't colour-only. */
+.automaton-svg path.traversed { stroke: var(--accent); stroke-width: 2.5; }
 .automaton-svg, .ast-svg { display: block; width: 100%; height: auto; margin: 0 auto; }
 .edge-label {
   fill: var(--text-h, #000); /* SVG text defaults to black: invisible on the dark-mode halo */
@@ -47,7 +52,23 @@
   .state { transition: none; }
 }
 .ast-node { fill: white; stroke: #333; }
+/* #52: same highlight colours as .state.active, extended to the AST tab. */
+.ast-node.active { fill: #fde68a; stroke: #b45309; stroke-width: 2.5; }
 .suggestion-banner { background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 12px; border-radius: 6px; margin: 12px 0; }
+
+/* #52: the test-string strip + verdict badge, shown under the diagram on
+   the NFA/DFA/min-DFA tabs. Consumed/next/not-yet and the stuck marker are
+   never colour-only: "next" adds bold + a background wash, "stuck" adds
+   bold + an underline, matching the existing .stage-tabs button.active
+   background-wash pattern. */
+.test-string-strip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin: 8px 0; font-size: 14px; }
+.test-string-strip .chars { font-family: var(--mono); letter-spacing: 0.02em; }
+.test-string-strip .consumed { color: var(--text); }
+.test-string-strip .not-yet { color: var(--text-h); }
+.test-string-strip .next { background: var(--accent-bg); border-radius: 3px; padding: 0 2px; font-weight: 700; }
+.test-string-strip .stuck { color: var(--error); font-weight: 700; text-decoration: underline wavy; }
+.test-string-strip .verdict-badge { font-weight: 600; color: var(--text-h); }
+.strip-legend { display: block; width: 100%; font-size: 12px; color: var(--text); }
 
 .field-meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 8px; min-width: 0; font-size: 12px; color: var(--text, #666); }
 .field-meta > small:first-child { min-width: 0; }
