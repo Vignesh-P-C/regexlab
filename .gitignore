@@ -1,6 +1,12 @@
 /docs/*
 !/docs/data-contracts.md
 !/docs/wasm-build.md
+!/docs/limitations.md
+!/docs/review-prep-plan.md
+!/docs/presentation.pptx
+!/docs/slides/
+!/docs/slides/img/
+!/docs/slides/img/*.png
 node_modules/
 dist/
 build/
