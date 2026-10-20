@@ -1,141 +1,52 @@
-/**
- * SubsetConstructionPass — CLAUDE.md v2 §8 (third stage of the pipeline)
- *
- * Algorithm: subset construction (Rabin–Scott), implemented as a
- * worklist/fixpoint over epsilon-closures — the textbook technique for
- * turning a nondeterministic automaton into a deterministic one.
- *
- * Core idea: each DFA state IS a set of NFA states — specifically, the
- * set of NFA states you could simultaneously be "standing on" while
- * reading the same input. Two structures make this concrete:
- *
- *   epsilonClosure(S) — every NFA state reachable from set S using only
- *   "eps" transitions, including S itself. This is what makes the DFA
- *   deterministic: the epsilon-ambiguity gets folded into which SET of
- *   NFA states a single DFA state represents, so the DFA itself never
- *   needs an "eps" transition at all.
- *
- *   move(S, symbol) — the set of NFA states reachable from set S by
- *   consuming exactly one input symbol (no epsilons).
- *
- * The worklist starts with epsilonClosure({nfa.startState}) as DFA state
- * 0, and for every unprocessed DFA state, computes epsilonClosure(move(S,
- * symbol)) for every symbol in the alphabet — creating a new DFA state
- * only the first time a given set of NFA states is seen (sets are
- * deduplicated by a sorted-and-joined key). This naturally terminates:
- * there are at most 2^|NFA states| distinct sets, so the fixpoint is
- * always reached, even though that bound is exponential in the worst
- * case (see CLAUDE.md §10 complexity table — this is the O(2^m) line).
- *
- * A DFA state is an accept state iff the NFA-state-set it represents
- * contains at least one of the original NFA's accept states.
- */
-
+/** Rabin–Scott worklist subset construction over epsilon closures. */
 import type { Automaton } from "../types.js";
-
+import { decodeCharacterSet, transitionMatches } from "../character-set.js";
 function epsilonClosure(nfa: Automaton, states: Iterable<number>): Set<number> {
-  const closure = new Set<number>(states);
-  const stack = [...closure];
-  while (stack.length > 0) {
+  const closure = new Set(states), stack = [...closure];
+  while (stack.length) {
     const state = stack.pop()!;
-    const epsTargets = nfa.transitions.get(state)?.get("eps") ?? [];
-    for (const target of epsTargets) {
-      if (!closure.has(target)) {
-        closure.add(target);
-        stack.push(target);
-      }
-    }
+    for (const target of nfa.transitions.get(state)?.get("eps") ?? []) if (!closure.has(target)) { closure.add(target); stack.push(target); }
   }
   return closure;
 }
-
 function move(nfa: Automaton, states: Iterable<number>, symbol: string): Set<number> {
   const result = new Set<number>();
-  for (const state of states) {
-    const targets = nfa.transitions.get(state)?.get(symbol) ?? [];
-    for (const target of targets) result.add(target);
+  for (const state of states) for (const [label, targets] of nfa.transitions.get(state) ?? []) {
+    if (transitionMatches(label, symbol)) targets.forEach((target) => result.add(target));
   }
   return result;
 }
-
-/** The input alphabet is every symbol the NFA transitions on, excluding "eps". */
 function alphabetOf(nfa: Automaton): string[] {
   const symbols = new Set<string>();
-  for (const bySymbol of nfa.transitions.values()) {
-    for (const symbol of bySymbol.keys()) {
-      if (symbol !== "eps") symbols.add(symbol);
-    }
+  for (const bySymbol of nfa.transitions.values()) for (const label of bySymbol.keys()) {
+    if (label === "eps") continue;
+    const set = decodeCharacterSet(label);
+    if (set) set.forEach((code) => symbols.add(String.fromCharCode(code)));
+    else if (label.length === 1) symbols.add(label);
   }
   return [...symbols].sort();
 }
-
-/** Canonical, order-independent key for a set of NFA states, used to dedupe DFA states. */
-function setKey(states: Set<number>): string {
-  return [...states].sort((a, b) => a - b).join(",");
-}
-
-/** SubsetConstructionPass entry point: NFA in, DFA out (same Automaton shape, no "eps" transitions). */
+function setKey(states: Set<number>): string { return [...states].sort((a, b) => a - b).join(","); }
 export function subsetConstruction(nfa: Automaton): Automaton {
-  const alphabet = alphabetOf(nfa);
-
-  const stateSets: Set<number>[] = []; // DFA state id -> the NFA-state-set it represents
-  const idBySetKey = new Map<string, number>();
+  const alphabet = alphabetOf(nfa), stateSets: Set<number>[] = [], idByKey = new Map<string, number>();
   const transitions = new Map<number, Map<string, number[]>>();
-
-  function idFor(nfaStateSet: Set<number>): number {
-    const key = setKey(nfaStateSet);
-    let id = idBySetKey.get(key);
-    if (id === undefined) {
-      id = stateSets.length;
-      idBySetKey.set(key, id);
-      stateSets.push(nfaStateSet);
-    }
+  function idFor(states: Set<number>): number {
+    const key = setKey(states); let id = idByKey.get(key);
+    if (id === undefined) { id = stateSets.length; idByKey.set(key, id); stateSets.push(states); }
     return id;
   }
-
   const startState = idFor(epsilonClosure(nfa, [nfa.startState]));
-
-  // Worklist/fixpoint: process every DFA state exactly once, even though
-  // new states can be discovered mid-loop (stateSets.length grows as we go).
-  const processed = new Set<number>();
-  const worklist: number[] = [startState];
-
-  while (worklist.length > 0) {
-    const current = worklist.pop()!;
-    if (processed.has(current)) continue;
-    processed.add(current);
-
+  const worklist = [startState], processed = new Set<number>();
+  while (worklist.length) {
+    const current = worklist.pop()!; if (processed.has(current)) continue; processed.add(current);
     for (const symbol of alphabet) {
-      const moved = move(nfa, stateSets[current], symbol);
-      if (moved.size === 0) continue; // no transition on this symbol -> implicit dead state, omitted
-
-      const targetId = idFor(epsilonClosure(nfa, moved));
-
-      let bySymbol = transitions.get(current);
-      if (!bySymbol) {
-        bySymbol = new Map();
-        transitions.set(current, bySymbol);
-      }
-      bySymbol.set(symbol, [targetId]); // deterministic: exactly one destination per symbol
-
-      if (!processed.has(targetId)) worklist.push(targetId);
+      const moved = move(nfa, stateSets[current], symbol); if (!moved.size) continue;
+      const target = idFor(epsilonClosure(nfa, moved));
+      let bySymbol = transitions.get(current); if (!bySymbol) { bySymbol = new Map(); transitions.set(current, bySymbol); }
+      bySymbol.set(symbol, [target]); if (!processed.has(target)) worklist.push(target);
     }
   }
-
   const acceptStates = new Set<number>();
-  stateSets.forEach((nfaStateSet, dfaId) => {
-    for (const nfaState of nfaStateSet) {
-      if (nfa.acceptStates.has(nfaState)) {
-        acceptStates.add(dfaId);
-        break;
-      }
-    }
-  });
-
-  return {
-    stateCount: stateSets.length,
-    startState,
-    acceptStates,
-    transitions,
-  };
+  stateSets.forEach((set, id) => { if ([...set].some((state) => nfa.acceptStates.has(state))) acceptStates.add(id); });
+  return { stateCount: stateSets.length, startState, acceptStates, transitions };
 }

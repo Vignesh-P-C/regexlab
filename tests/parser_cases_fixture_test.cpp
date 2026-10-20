@@ -35,6 +35,7 @@ std::string typeName(ParseErrorType t) {
         case ParseErrorType::EmptyGroup:        return "EmptyGroup";
         case ParseErrorType::DanglingOperator:  return "DanglingOperator";
         case ParseErrorType::PatternTooComplex: return "PatternTooComplex";
+        case ParseErrorType::InvalidCharacterClass: return "InvalidCharacterClass";
     }
     return "<unknown>";
 }
@@ -52,7 +53,7 @@ TEST_CASE("ParserPass — shared parity fixture", "[parser][parity]") {
     // A fixture that failed to load would otherwise make this test pass
     // vacuously, which is the one way a parity check can silently stop working.
     // The fixture currently holds 35 cases; raise this guard whenever cases are added.
-    REQUIRE(cases.size() >= 35);
+    REQUIRE(cases.size() >= 56);
 
     for (const auto& c : cases) {
         const std::string name = c.at("name").get<std::string>();

@@ -55,20 +55,26 @@ function randomChar(rng: () => number): string {
 /** Random AST from char / concat / alt / star, so it is parseable by construction. */
 function randomAST(rng: () => number, maxDepth: number): ASTNode {
   if (maxDepth <= 0) return { kind: "char", value: randomChar(rng) };
-  switch (randomInt(rng, 4)) {
+  switch (randomInt(rng, 7)) {
     case 0:
       return { kind: "char", value: randomChar(rng) };
     case 1:
       return { kind: "concat", left: randomAST(rng, maxDepth - 1), right: randomAST(rng, maxDepth - 1) };
     case 2:
       return { kind: "alt", left: randomAST(rng, maxDepth - 1), right: randomAST(rng, maxDepth - 1) };
-    default:
+    case 3:
       return { kind: "star", child: randomAST(rng, maxDepth - 1) };
+    case 4:
+      return { kind: "plus", child: randomAST(rng, maxDepth - 1) };
+    case 5:
+      return { kind: "optional", child: randomAST(rng, maxDepth - 1) };
+    default:
+      return { kind: "charset", characters: [97, 98, 99], label: "[a-c]" };
   }
 }
 
 function escapeIfMeta(c: string): string {
-  return "|*()\\".includes(c) ? "\\" + c : c;
+  return "|*+?().[]\\\\".includes(c) ? "\\" + c : c;
 }
 
 /** concat binds tighter than alt: "a|b" followed by "c" must become "(a|b)c". */
@@ -78,19 +84,25 @@ function serializeConcatChild(node: ASTNode): string {
 
 /** The grammar's atom is CHAR | '(' regex ')', so only a bare char needs no parens. */
 function serializeStarChild(node: ASTNode): string {
-  return node.kind === "char" ? serialize(node) : `(${serialize(node)})`;
+  return node.kind === "char" || node.kind === "charset" ? serialize(node) : `(${serialize(node)})`;
 }
 
 function serialize(node: ASTNode): string {
   switch (node.kind) {
     case "char":
       return escapeIfMeta(node.value);
+    case "charset":
+      return node.label;
     case "concat":
       return serializeConcatChild(node.left) + serializeConcatChild(node.right);
     case "alt":
       return `${serialize(node.left)}|${serialize(node.right)}`;
     case "star":
-      return `${serializeStarChild(node.child)}*`;
+      return serializeStarChild(node.child) + "*";
+    case "plus":
+      return serializeStarChild(node.child) + "+";
+    case "optional":
+      return serializeStarChild(node.child) + "?";
   }
 }
 

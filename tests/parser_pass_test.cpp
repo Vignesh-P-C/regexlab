@@ -249,3 +249,22 @@ TEST_CASE("ParserPass — non-ASCII input is rejected cleanly", "[parser]") {
         }
     }
 }
+
+
+TEST_CASE("ParserPass — extended grammar and symbolic classes", "[parser][extended]") {
+    REQUIRE(parse("a+") == ok(makePlus(makeChar('a'))));
+    REQUIRE(parse("a?") == ok(makeOptional(makeChar('a'))));
+    REQUIRE(parse("[a-c]") == ok(makeCharacterSet({97, 98, 99}, "[a-c]")));
+    REQUIRE(parse(".") == ok(makeCharacterSet([]{
+        std::vector<int> chars; for(int c=0;c<=127;++c) if(c!=10&&c!=13) chars.push_back(c); return chars;
+    }(), ".")));
+    REQUIRE(parse("\\+") == ok(makeChar('+')));
+    REQUIRE(parse("\\d") == ok(makeCharacterSet({48,49,50,51,52,53,54,55,56,57}, "\\d")));
+    auto emptyClass = parse("[]");
+    REQUIRE_FALSE(emptyClass.ok);
+    REQUIRE(emptyClass.error.type == ParseErrorType::InvalidCharacterClass);
+    REQUIRE(emptyClass.error.position == 0);
+    auto descending = parse("[z-a]");
+    REQUIRE_FALSE(descending.ok);
+    REQUIRE(descending.error.position == 2);
+}

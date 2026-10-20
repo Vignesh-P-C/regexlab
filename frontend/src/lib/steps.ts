@@ -9,6 +9,7 @@
 // Record-based wire-format Automaton these functions actually receive.
 
 import type { ASTNode, Automaton } from "../types/engine";
+import { transitionMatches } from "../../../engine/character-set.js";
 
 export type Verdict = "pending" | "match" | "no-match" | "stuck";
 
@@ -73,10 +74,13 @@ function move(
   const moved = new Set<number>();
   const edges: TraversedEdge[] = [];
   for (const state of states) {
-    const targets = automaton.transitions[String(state)]?.[symbol] ?? [];
-    for (const target of targets) {
-      edges.push({ from: state, to: target, label: symbol });
-      moved.add(target);
+    const byLabel = automaton.transitions[String(state)] ?? {};
+    for (const [label, targets] of Object.entries(byLabel)) {
+      if (!transitionMatches(label, symbol)) continue;
+      for (const target of targets) {
+        edges.push({ from: state, to: target, label });
+        moved.add(target);
+      }
     }
   }
   return { moved, edges };
@@ -250,7 +254,7 @@ export function postOrderAstNodes(ast: ASTNode): { node: ASTNode; nodeIndex: num
     if (node.kind === "concat" || node.kind === "alt") {
       visit(node.left);
       visit(node.right);
-    } else if (node.kind === "star") {
+    } else if (node.kind === "star" || node.kind === "plus" || node.kind === "optional") {
       visit(node.child);
     }
     result.push({ node, nodeIndex: result.length });
@@ -265,12 +269,18 @@ function thompsonRuleCaption(node: ASTNode): string {
   switch (node.kind) {
     case "char":
       return `char '${node.value}': single-transition fragment (s) --${node.value}--> (f)`;
+    case "charset":
+      return "class " + node.label + ": one symbolic transition matches " + node.characters.length + " ASCII characters";
     case "concat":
       return "concat: wire left.accept --eps--> right.start";
     case "alt":
       return "alt: new start/accept, ε to both branches, both branches ε to the new accept";
     case "star":
       return "star: new start/accept, ε skip (zero reps) + ε loop-back (repeat)";
+    case "plus":
+      return "plus: enter once, then ε loop-back or exit (one or more reps)";
+    case "optional":
+      return "optional: ε branch skips or enters the fragment once";
   }
 }
 

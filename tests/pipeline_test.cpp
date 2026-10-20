@@ -76,3 +76,21 @@ TEST_CASE("Pipeline — parse failure still returns well-formed (empty) stage fi
     REQUIRE(result.dfa.stateCount == 0);
     REQUIRE(result.minDfa.stateCount == 0);
 }
+
+
+TEST_CASE("Pipeline — extended operators and classes preserve full-match semantics", "[pipeline][extended]") {
+    struct Case { std::string pattern; std::string input; bool matches; };
+    const std::vector<Case> cases = {
+        {"a+b?", "a", true}, {"a+b?", "aaab", true}, {"a+b?", "b", false},
+        {"a?", "", true}, {"a+", "", false}, {"[a-z]+", "regex", true},
+        {"[a-z]+", "reg3x", false}, {R"(\d+)", "123", true},
+        {R"(\d+)", "12x", false}, {"[^0-9]+", "abc", true},
+        {"[^0-9]+", "a1", false}, {".", "x", true}, {".", "\n", false},
+        {R"(\+)", "+", true}
+    };
+    for (const auto& c : cases) {
+        const auto result = runPipeline(c.pattern, c.input);
+        REQUIRE(result.ok);
+        REQUIRE((result.trace.result == MatchResultType::Match) == c.matches);
+    }
+}

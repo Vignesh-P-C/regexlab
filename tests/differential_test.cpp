@@ -54,7 +54,7 @@ char randomChar() {
 ASTNodePtr randomAST(int maxDepth) {
     if (maxDepth <= 0) return makeChar(randomChar());
 
-    std::uniform_int_distribution<int> choice(0, 3);
+    std::uniform_int_distribution<int> choice(0, 6);
     switch (choice(rng())) {
         case 0:
             return makeChar(randomChar());
@@ -62,13 +62,19 @@ ASTNodePtr randomAST(int maxDepth) {
             return makeConcat(randomAST(maxDepth - 1), randomAST(maxDepth - 1));
         case 2:
             return makeAlt(randomAST(maxDepth - 1), randomAST(maxDepth - 1));
-        default:
+        case 3:
             return makeStar(randomAST(maxDepth - 1));
+        case 4:
+            return makePlus(randomAST(maxDepth - 1));
+        case 5:
+            return makeOptional(randomAST(maxDepth - 1));
+        default:
+            return makeCharacterSet({97, 98, 99}, "[a-c]");
     }
 }
 
 std::string escapeIfMeta(char c) {
-    static const std::string metachars = "|*()\\";
+    static const std::string metachars = "|*+?.[]()\\";
     if (metachars.find(c) != std::string::npos) return std::string("\\") + c;
     return std::string(1, c);
 }
@@ -91,7 +97,7 @@ std::string serializeConcatChild(const ASTNodePtr& child) {
  *  including another StarNode (this grammar has no "a**"), must be
  *  parenthesized to become a valid atom first. */
 std::string serializeStarChild(const ASTNodePtr& child) {
-    if (std::holds_alternative<CharNode>(child->node)) {
+    if (std::holds_alternative<CharNode>(child->node) || std::holds_alternative<CharacterSetNode>(child->node)) {
         return serialize(child);
     }
     return "(" + serialize(child) + ")";
@@ -103,6 +109,8 @@ std::string serialize(const ASTNodePtr& node) {
             using T = std::decay_t<decltype(n)>;
             if constexpr (std::is_same_v<T, CharNode>) {
                 return escapeIfMeta(n.value);
+            } else if constexpr (std::is_same_v<T, CharacterSetNode>) {
+                return n.label;
             } else if constexpr (std::is_same_v<T, ConcatNode>) {
                 return serializeConcatChild(n.left) + serializeConcatChild(n.right);
             } else if constexpr (std::is_same_v<T, AltNode>) {
@@ -110,6 +118,10 @@ std::string serialize(const ASTNodePtr& node) {
                 return serialize(n.left) + "|" + serialize(n.right);
             } else if constexpr (std::is_same_v<T, StarNode>) {
                 return serializeStarChild(n.child) + "*";
+            } else if constexpr (std::is_same_v<T, PlusNode>) {
+                return serializeStarChild(n.child) + "+";
+            } else if constexpr (std::is_same_v<T, OptionalNode>) {
+                return serializeStarChild(n.child) + "?";
             }
         },
         node->node);
@@ -174,4 +186,22 @@ TEST_CASE("Differential — random patterns agree with std::regex", "[differenti
 
     INFO("Total (pattern, input) pairs checked: " << casesChecked);
     REQUIRE(casesChecked == kNumPatterns * kStringsPerPattern);
+}
+
+
+TEST_CASE("Differential — extended syntax agrees with std::regex", "[differential][extended]") {
+    struct Case { std::string pattern; std::string input; };
+    const std::vector<Case> cases = {
+        {"a+b?", "aaab"}, {"a+b?", "b"}, {"a?", ""}, {"a+", ""},
+        {"[a-c]+", "abc"}, {"[a-c]+", "abx"}, {"[^0-9]+", "abc"},
+        {"[^0-9]+", "a1"}, {R"(\d+)", "0123"}, {R"(\w+)", "a_09"},
+        {R"(\s+)", " \t"}, {R"(\+)", "+"}, {".", "x"}, {".", "\n"}
+    };
+    for (const auto& c : cases) {
+        PipelineResult result = runPipeline(c.pattern, c.input);
+        REQUIRE(result.ok);
+        const std::regex oracle(c.pattern);
+        INFO("pattern: " << c.pattern << " input size: " << c.input.size());
+        REQUIRE((result.trace.result == MatchResultType::Match) == std::regex_match(c.input, oracle));
+    }
 }

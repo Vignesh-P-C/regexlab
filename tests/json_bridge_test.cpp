@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "regexlab/json_bridge.hpp"
+#include "regexlab/character-set.hpp"
 
 using namespace regexlab;
 using json = nlohmann::json;
@@ -132,4 +133,35 @@ TEST_CASE("json_bridge — non-ASCII in the test string alone stays safe", "[jso
     REQUIRE_NOTHROW(raw = runPipelineJson("a", std::string("\xC3\xA9")));
     json j = json::parse(raw);
     REQUIRE(j["ok"].get<bool>() == true);
+}
+
+
+TEST_CASE("json_bridge — charset AST and symbolic NFA labels serialize across the boundary", "[json_bridge][extended]") {
+    const json j = json::parse(runPipelineJson("[a-c]+", "bc"));
+    REQUIRE(j["ok"].get<bool>());
+    REQUIRE(j["ast"]["kind"] == "plus");
+    REQUIRE(j["ast"]["child"]["kind"] == "charset");
+    REQUIRE(j["ast"]["child"]["characters"] == json::array({97,98,99}));
+    REQUIRE(j["ast"]["child"]["label"] == "[a-c]");
+    const auto encoded = encodeCharacterSet({97,98,99});
+    REQUIRE(j["nfa"]["transitions"]["0"][encoded] == json::array({1}));
+    REQUIRE(j["trace"]["result"] == "match");
+}
+
+TEST_CASE("json_bridge — invalid class reports the structured error name", "[json_bridge][extended]") {
+    const json j = json::parse(runPipelineJson("[z-a]", "z"));
+    REQUIRE_FALSE(j["ok"].get<bool>());
+    REQUIRE(j["error"]["type"] == "InvalidCharacterClass");
+    REQUIRE(j["error"]["position"] == 2);
+}
+
+
+TEST_CASE("json_bridge — shorthand AST members serialize in sorted ASCII order", "[json_bridge][extended]") {
+    const json j = json::parse(runPipelineJson(R"(\w)", "A_9"));
+    REQUIRE(j["ok"].get<bool>());
+    REQUIRE(j["ast"]["kind"] == "charset");
+    REQUIRE(j["ast"]["characters"].size() == 63);
+    REQUIRE(j["ast"]["characters"][0] == 48);
+    REQUIRE(j["ast"]["characters"][9] == 57);
+    REQUIRE(j["ast"]["characters"][10] == 65);
 }

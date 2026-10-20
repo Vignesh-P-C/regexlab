@@ -13,6 +13,8 @@
 #include "regexlab/passes/parser-pass.hpp"
 
 #include <exception>
+#include <algorithm>
+#include <cctype>
 
 namespace regexlab {
 
@@ -85,8 +87,8 @@ private:
     size_t pos_ = 0;
     int depth_ = 0;
 
-    std::optional<char> peek() const {
-        if (pos_ < pattern_.size()) return pattern_[pos_];
+    std::optional<char> peek(size_t offset = 0) const {
+        if (pos_ + offset < pattern_.size()) return pattern_[pos_ + offset];
         return std::nullopt;
     }
 
@@ -170,85 +172,196 @@ private:
         return c.has_value() && *c != '|' && *c != ')';
     }
 
-    /** factor ::= atom quantifier?   (quantifier restricted to '*' in Core scope) */
+    struct ClassAtom { std::vector<int> characters; bool singleton; };
+    struct EscapeResult { ASTNodePtr node; ClassAtom atom; };
+
+    static std::vector<int> range(int first, int last) {
+        std::vector<int> values;
+        for (int value = first; value <= last; ++value) values.push_back(value);
+        return values;
+    }
+
+    /** factor ::= atom quantifier? */
     ASTNodePtr parseFactor() {
-        ASTNodePtr atom = parseAtom();
-        if (peek() == '*') {
-            advance();
-            return makeStar(atom);
+        ASTNodePtr child = parseAtom();
+        auto q = peek();
+        if (q == '*') { advance(); return makeStar(child); }
+        if (q == '+') { advance(); return makePlus(child); }
+        if (q == '?') { advance(); return makeOptional(child); }
+        return child;
+    }
+
+    std::vector<int> shorthand(char c) const {
+        switch (c) {
+            case 'd': return range('0', '9');
+            case 'w': {
+                auto chars = range('A', 'Z'); auto digits = range('0', '9');
+                chars.insert(chars.end(), digits.begin(), digits.end()); chars.push_back('_');
+                auto lower = range('a', 'z'); chars.insert(chars.end(), lower.begin(), lower.end());
+                std::sort(chars.begin(), chars.end()); return chars;
+            }
+            case 's': return {9, 10, 11, 12, 13, 32};
+            case 'D': {
+                auto chars = range(0, 127); auto excluded = range('0', '9');
+                for (int c : excluded) chars.erase(std::remove(chars.begin(), chars.end(), c), chars.end());
+                return chars;
+            }
+            case 'W': {
+                auto chars = range(0, 127); auto excluded = shorthand('w');
+                for (int c : excluded) chars.erase(std::remove(chars.begin(), chars.end(), c), chars.end());
+                return chars;
+            }
+            case 'S': {
+                auto chars = range(0, 127);
+                for (int c : std::vector<int>{9, 10, 11, 12, 13, 32})
+                    chars.erase(std::remove(chars.begin(), chars.end(), c), chars.end());
+                return chars;
+            }
+            default: return {};
         }
-        return atom;
+    }
+
+    bool isShorthand(char c) const {
+        return c == 'd' || c == 'w' || c == 's' || c == 'D' || c == 'W' || c == 'S';
+    }
+
+    EscapeResult parseEscape() {
+        size_t slash = pos_;
+        advance();
+        auto escaped = peek();
+        if (!escaped.has_value()) {
+            throw ParseFailure(ParseError{ParseErrorType::UnexpectedToken, static_cast<int>(slash),
+                std::string("a character after '\\'"), std::string("end of input")});
+        }
+        requireAscii(*escaped, pos_);
+        advance();
+        if (isShorthand(*escaped)) {
+            auto chars = shorthand(*escaped);
+            return {makeCharacterSet(chars, std::string("\\") + *escaped), {chars, false}};
+        }
+        if (*escaped == 'x') {
+            std::string digits = pattern_.substr(pos_, 2);
+            if (digits.size() != 2 || !std::all_of(digits.begin(), digits.end(),
+                    [](unsigned char c) { return std::isxdigit(c) != 0; })) {
+                throw ParseFailure(ParseError{ParseErrorType::UnexpectedToken, static_cast<int>(slash),
+                    std::string("two hex digits after '\\x'"),
+                    digits.empty() ? std::string("end of input") : digits});
+            }
+            int code = std::stoi(digits, nullptr, 16);
+            pos_ += 2;
+            if (code > 127)
+                throw ParseFailure(ParseError{ParseErrorType::UnexpectedToken, static_cast<int>(slash),
+                    std::string("an ASCII escape"), std::string("non-ASCII character")});
+            return {makeChar(static_cast<char>(code)), {{code}, true}};
+        }
+        int code = static_cast<unsigned char>(*escaped);
+        switch (*escaped) {
+            case 'n': code = 10; break; case 'r': code = 13; break; case 't': code = 9; break;
+            case 'v': code = 11; break; case 'f': code = 12; break; default: break;
+        }
+        return {makeChar(static_cast<char>(code)), {{code}, true}};
+    }
+
+    ClassAtom parseClassAtom(size_t open) {
+        if (!peek().has_value())
+            throw ParseFailure(ParseError{ParseErrorType::InvalidCharacterClass, static_cast<int>(open),
+                std::string("a closing ']'"), std::string("end of input")});
+        if (peek() == '\\') return parseEscape().atom;
+        char c = *peek();
+        requireAscii(c, pos_);
+        advance();
+        return {{static_cast<unsigned char>(c)}, true};
+    }
+
+    ASTNodePtr parseCharacterClass() {
+        size_t open = pos_;
+        advance();
+        bool negated = peek() == '^';
+        if (negated) advance();
+        std::unordered_set<int> chars;
+        int members = 0;
+        while (peek() != ']') {
+            if (!peek().has_value())
+                throw ParseFailure(ParseError{ParseErrorType::InvalidCharacterClass, static_cast<int>(open),
+                    std::string("a closing ']'"), std::string("end of input")});
+            ClassAtom first = parseClassAtom(open);
+            if (first.singleton && first.characters[0] != 45 && peek() == '-' &&
+                    peek(1) != ']' && peek(1).has_value()) {
+                size_t dash = pos_;
+                advance();
+                ClassAtom last = parseClassAtom(open);
+                if (!last.singleton || first.characters[0] > last.characters[0])
+                    throw ParseFailure(ParseError{ParseErrorType::InvalidCharacterClass, static_cast<int>(dash),
+                        std::string("an ascending range with single-character endpoints"),
+                        std::string("invalid range")});
+                for (int code = first.characters[0]; code <= last.characters[0]; ++code) chars.insert(code);
+            } else {
+                for (int code : first.characters) chars.insert(code);
+            }
+            ++members;
+        }
+        if (members == 0)
+            throw ParseFailure(ParseError{ParseErrorType::InvalidCharacterClass, static_cast<int>(open),
+                std::string("at least one class member"), std::string("empty character class")});
+        advance();
+        std::vector<int> values;
+        if (negated) {
+            for (int code = 0; code <= 127; ++code) if (!chars.count(code)) values.push_back(code);
+        } else {
+            values.assign(chars.begin(), chars.end());
+            std::sort(values.begin(), values.end());
+        }
+        return makeCharacterSet(std::move(values), pattern_.substr(open, pos_ - open));
     }
 
     /**
-     * atom ::= CHAR | '(' regex ')'
-     * ('[' charclass ']' is Stretch B — not implemented yet, see types.hpp)
+     * atom ::= ASCII_CHAR | '.' | '[' class ']' | '(' regex ')' | escape
+     * Outside a class, ^ and $ are ordinary ASCII literals under full-match
+     * semantics; they do not introduce zero-width assertions.
      */
     ASTNodePtr parseAtom() {
         auto c = peek();
-
         if (!c.has_value()) {
-            throw ParseFailure(ParseError{ParseErrorType::UnexpectedToken,
-                                           static_cast<int>(pos_),
-                                           std::string("a character or '('"),
-                                           std::string("end of input")});
+            throw ParseFailure(ParseError{ParseErrorType::UnexpectedToken, static_cast<int>(pos_),
+                std::string("a character or '('"), std::string("end of input")});
         }
-
         if (*c == '(') {
             size_t openParenPos = pos_;
             advance();
-
             if (peek() == ')') {
-                throw ParseFailure(ParseError{ParseErrorType::EmptyGroup,
-                                               static_cast<int>(pos_),
-                                               std::string("a pattern before ')'"),
-                                               std::string(")")});
+                throw ParseFailure(ParseError{ParseErrorType::EmptyGroup, static_cast<int>(pos_),
+                    std::string("a pattern before ')'"), std::string(")")});
             }
-
             if (++depth_ > limits_.maxNestingDepth) {
-                throw ParseFailure(ParseError{
-                    ParseErrorType::PatternTooComplex, static_cast<int>(openParenPos),
+                throw ParseFailure(ParseError{ParseErrorType::PatternTooComplex, static_cast<int>(openParenPos),
                     std::string("nesting depth <= ") + std::to_string(limits_.maxNestingDepth),
                     std::string("deeper group nesting")});
             }
             ASTNodePtr inner = parseRegex();
             --depth_;
-
             if (peek() != ')') {
-                std::string found =
-                    peek().has_value() ? std::string(1, *peek()) : std::string("end of input");
-                throw ParseFailure(ParseError{ParseErrorType::UnmatchedParen,
-                                               static_cast<int>(openParenPos),
-                                               std::string("')'"), found});
+                std::string found = peek().has_value() ? std::string(1, *peek()) : std::string("end of input");
+                throw ParseFailure(ParseError{ParseErrorType::UnmatchedParen, static_cast<int>(openParenPos),
+                    std::string("')'"), found});
             }
             advance();  // consume ')'
             return inner;
         }
-
-        if (*c == '|' || *c == '*' || *c == ')') {
+        if (*c == '[') return parseCharacterClass();
+        if (*c == '.') {
+            advance();
+            auto chars = range(0, 127);
+            chars.erase(std::remove(chars.begin(), chars.end(), 10), chars.end());
+            chars.erase(std::remove(chars.begin(), chars.end(), 13), chars.end());
+            return makeCharacterSet(std::move(chars), ".");
+        }
             // An operator appearing where an atom was expected has nothing to
             // apply to — e.g. "*ab", "a||b", "a**" (second '*'), "()" handled above.
-            throw ParseFailure(ParseError{ParseErrorType::DanglingOperator,
-                                           static_cast<int>(pos_),
-                                           std::string("a character or '('"),
-                                           std::string(1, *c)});
+        if (*c == '|' || *c == '*' || *c == '+' || *c == '?' || *c == ')') {
+            throw ParseFailure(ParseError{ParseErrorType::DanglingOperator, static_cast<int>(pos_),
+                std::string("a character or '('"), std::string(1, *c)});
         }
-
-        if (*c == '\\') {
-            size_t escapePos = pos_;
-            advance();
-            auto escaped = peek();
-            if (!escaped.has_value()) {
-                throw ParseFailure(ParseError{ParseErrorType::UnexpectedToken,
-                                               static_cast<int>(escapePos),
-                                               std::string("a character after '\\'"),
-                                               std::string("end of input")});
-            }
-            requireAscii(*escaped, pos_);
-            advance();
-            return makeChar(*escaped);
-        }
-
+        if (*c == '\\') return parseEscape().node;
         requireAscii(*c, pos_);
         advance();
         return makeChar(*c);

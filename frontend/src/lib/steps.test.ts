@@ -81,6 +81,16 @@ function stuckIndex(steps: Step[]): number | null {
 // ---------------------------------------------------------------------------
 
 describe("computeNfaSteps / computeDfaSteps -- direct cases (#52)", () => {
+  it("NFA playback follows the symbolic charset edge for each matching input symbol", () => {
+    const { nfa } = buildAll("[a-c]");
+    const steps = computeNfaSteps(nfa, "b");
+    expect(steps).toHaveLength(2);
+    expect(steps[1].activeStates).toEqual([1]);
+    expect(steps[1].traversedEdges).toHaveLength(1);
+    expect(steps[1].traversedEdges[0].label).toMatch(/^cs:[0-9a-f]{32}$/);
+    expect(steps[1].verdict).toBe("match");
+  });
+
   it("empty string: step 0 only, verdict decided immediately", () => {
     const { nfa, dfa, minDfa } = buildAll("a*");
     const nfaSteps = computeNfaSteps(nfa, "");
