@@ -1,11 +1,34 @@
+import { useEffect, useRef } from "react";
 import type { ASTNode, Automaton, Stage } from "../types/engine";
+import { postOrderAstNodes } from "../lib/steps";
 
 type Props = {
   stage: Stage;
   ast: ASTNode | null;
   automaton: Automaton | null; // the nfa/dfa/minDfa matching `stage`
-  activeStates: number[]; // from MatchTrace.steps[activeStep], applies only to minDfa
+  activeStates: number[]; // #52: the current playback step's active state(s); [] on the AST tab
+  traversedEdges: { from: number; to: number; label: string }[]; // #52: edges taken to reach this step; [] on the AST tab
+  astNodeIndex: number | null; // #52: the AST tab's current postOrderAstNodes index; null on the other tabs
 };
+
+/** #52: scroll `container` (never the page) just enough to bring `target`
+ *  into view. Deliberately not `target.scrollIntoView()`, which can walk
+ *  up and scroll ancestors beyond the one scrollable box we own. */
+function scrollIntoViewWithinContainer(container: HTMLElement, target: Element) {
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const pad = 20;
+  if (targetRect.left < containerRect.left + pad) {
+    container.scrollLeft -= containerRect.left + pad - targetRect.left;
+  } else if (targetRect.right > containerRect.right - pad) {
+    container.scrollLeft += targetRect.right - (containerRect.right - pad);
+  }
+  if (targetRect.top < containerRect.top + pad) {
+    container.scrollTop -= containerRect.top + pad - targetRect.top;
+  } else if (targetRect.bottom > containerRect.bottom - pad) {
+    container.scrollTop += targetRect.bottom - (containerRect.bottom - pad);
+  }
+}
 
 const NODE_R = 20;
 
@@ -159,12 +182,25 @@ function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[
   return { positions, layer, width, height };
 }
 
-/** States in BFS layers, left to right; transitions as labeled arrows, self-loops as small arcs. */function AutomatonGraph({ automaton, activeStates }: { automaton: Automaton; activeStates: number[] }) {
-    const { stateCount, startState, acceptStates, transitions } = automaton;
+/** States in BFS layers, left to right; transitions as labeled arrows, self-loops as small arcs. */
+function AutomatonGraph({
+  automaton,
+  activeStates,
+  traversedEdges,
+}: {
+  automaton: Automaton;
+  activeStates: number[];
+  traversedEdges: { from: number; to: number; label: string }[];
+}) {
+  const { stateCount, startState, acceptStates, transitions } = automaton;
   const edges = groupEdges(transitions);
   const edgeKeys = new Set(edges.map((e) => `${e.from}>${e.to}`));
   const { positions, layer, width, height } = layeredLayout(stateCount, startState, edges);
   const activeSet = new Set(activeStates);
+  // #52: traversedEdges is per-symbol; group it the same way groupEdges
+  // groups drawn edges, so a merged multi-symbol edge highlights whenever
+  // ANY of its symbols was the one actually taken.
+  const traversedKeys = new Set(traversedEdges.map((e) => `${e.from}>${e.to}`));
 
   return (
     <svg
@@ -200,6 +236,7 @@ function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[
                 fill="none"
                 stroke="currentColor"
                 markerEnd="url(#arrow)"
+                className={traversedKeys.has(key) ? "traversed" : undefined}
               />
               <text x={a.x} y={dir === 1 ? loopY + 14 : loopY - 4} textAnchor="middle" fontSize="12" className="edge-label">
                 {label}
@@ -229,6 +266,7 @@ function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[
               fill="none"
               stroke="currentColor"
               markerEnd="url(#arrow)"
+              className={traversedKeys.has(key) ? "traversed" : undefined}
             />
             <text x={g.label.x} y={g.label.y} textAnchor="middle" fontSize="12" className="edge-label">
               {label}
@@ -242,7 +280,13 @@ function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[
           {id === startState && (
             <line x1={p.x - NODE_R - 24} y1={p.y} x2={p.x - NODE_R} y2={p.y} stroke="currentColor" markerEnd="url(#arrow)" />
           )}
-          <circle cx={p.x} cy={p.y} r={NODE_R} className={`state${acceptStates.includes(id) ? " accept" : ""}${activeSet.has(id) ? " active" : ""}`} />
+          <circle
+            cx={p.x}
+            cy={p.y}
+            r={NODE_R}
+            data-state-id={id}
+            className={`state${acceptStates.includes(id) ? " accept" : ""}${activeSet.has(id) ? " active" : ""}`}
+          />
           {acceptStates.includes(id) && <circle cx={p.x} cy={p.y} r={NODE_R - 6} className="accept-ring" />}
           <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="13">
             {id}
@@ -260,7 +304,7 @@ const MIN_AST_SCALE = 0.85;
 type Positioned = { node: ASTNode; x: number; y: number; children: Positioned[] };
 
 /** Depth = y, in-order leaf position = x — a plain recursive tree layout. */
-function AstTree({ node }: { node: ASTNode }) {
+function AstTree({ node, highlightNodeIndex }: { node: ASTNode; highlightNodeIndex: number | null }) {
   let nextLeafX = 0;
   let maxDepth = 0;
   const LEVEL_HEIGHT = 70;
@@ -303,6 +347,13 @@ function AstTree({ node }: { node: ASTNode }) {
   const label = (n: ASTNode) =>
     n.kind === "char" ? `'${n.value}'` : n.kind === "concat" ? "\u00b7" : n.kind === "alt" ? "|" : "*";
 
+  // #52: highlightNodeIndex is a postOrderAstNodes index (the same order
+  // computeAstSteps walks) -- not this component's own `nodes` array
+  // order (collect() above visits parent-before-children). Resolve it to
+  // the actual ASTNode object, then match by reference.
+  const highlightedNode =
+    highlightNodeIndex === null ? null : postOrderAstNodes(node)[highlightNodeIndex]?.node ?? null;
+
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="ast-svg" style={{ minWidth: width * MIN_AST_SCALE, maxWidth: width }}>
       {edges.map((e, i) => (
@@ -310,7 +361,13 @@ function AstTree({ node }: { node: ASTNode }) {
       ))}
       {nodes.map((p, i) => (
         <g key={i}>
-          <circle cx={p.x} cy={p.y} r={NODE_R} className="ast-node" />
+          <circle
+            cx={p.x}
+            cy={p.y}
+            r={NODE_R}
+            data-node-index={highlightNodeIndex !== null && p.node === highlightedNode ? highlightNodeIndex : undefined}
+            className={`ast-node${p.node === highlightedNode ? " active" : ""}`}
+          />
           <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="13">
             {label(p.node)}
           </text>
@@ -320,19 +377,32 @@ function AstTree({ node }: { node: ASTNode }) {
   );
 }
 
-export function AutomatonView({ stage, ast, automaton, activeStates }: Props) {
+export function AutomatonView({ stage, ast, automaton, activeStates, traversedEdges, astNodeIndex }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // #52: keep the current step's highlight visible by scrolling only this
+  // box (scrollIntoViewWithinContainer never touches window/page scroll).
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const selector = stage === "ast" ? `[data-node-index="${astNodeIndex}"]` : `[data-state-id="${activeStates[0]}"]`;
+    if (stage === "ast" ? astNodeIndex === null : activeStates.length === 0) return;
+    const target = container.querySelector(selector);
+    if (target) scrollIntoViewWithinContainer(container, target);
+  }, [stage, activeStates, astNodeIndex]);
+
   if (stage === "ast") {
     if (!ast) return <div className="automaton-view empty">No pattern parsed yet.</div>;
     return (
-      <div className="automaton-view">
-        <AstTree node={ast} />
+      <div className="automaton-view" ref={containerRef}>
+        <AstTree node={ast} highlightNodeIndex={astNodeIndex} />
       </div>
     );
   }
   if (!automaton) return <div className="automaton-view empty">No pattern parsed yet.</div>;
   return (
-    <div className="automaton-view">
-      <AutomatonGraph automaton={automaton} activeStates={activeStates} />
+    <div className="automaton-view" ref={containerRef}>
+      <AutomatonGraph automaton={automaton} activeStates={activeStates} traversedEdges={traversedEdges} />
     </div>
   );
 }
