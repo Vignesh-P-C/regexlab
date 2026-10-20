@@ -24,7 +24,7 @@ RegexLab is a compiler-design semester project: take a regex pattern as a raw st
 - A hand-written recursive-descent parser with a formally specified grammar, not a regex-library shim
 - Classic automata-theory constructions (Thompson, subset construction, Moore's) as a pipeline of independently testable passes
 - The same pipeline validated in two languages, with the C++ build compiled to WebAssembly for in-browser execution — the same technique browser builds of SQLite use
-- Correctness validated four ways: golden-value unit tests, a pipeline-equivalence test, differential testing against a reference engine on thousands of randomized inputs in **both** languages, and sanitizer runs (AddressSanitizer / UndefinedBehaviorSanitizer)
+- Correctness validated three ways: golden-value unit tests, a pipeline-equivalence test, and differential testing against a reference engine on thousands of randomized inputs in **both** languages. (The C++ suite has also run clean under AddressSanitizer/UndefinedBehaviorSanitizer by hand once — real, but not wired into any script or CI, so it's a one-off check, not a standing guarantee.)
 - Explicit input guards (pattern length, nesting depth, ASCII-only) that turn pathological input into a clean `PatternTooComplex` / `UnexpectedToken` error instead of a crash — see [Limits and guards](#limits-and-guards)
 - A planned AI suggestion layer that can propose fixes for malformed patterns but is architecturally incapable of showing a wrong one — every suggestion must be re-parsed by the same hand-built parser before it is trusted
 - Strict separation between engine, visualization, and AI layers — each runs and is demoable on its own
@@ -71,7 +71,7 @@ RegexLab is a compiler-design semester project: take a regex pattern as a raw st
 | `MatcherPass` | DFA-driven matching | `Min-DFA`, `string` → `MatchTrace` | ✅ 8 tests | ✅ Ported, all golden values match |
 | `pipeline` | Chains all 5 passes into one call | `string`, `string` → snapshot of every stage \| `ParseError` | — (TS chains passes directly in tests) | ✅ Complete — a test proves output is identical to manually chaining all 5 passes |
 
-All C++ tests pass under `-Wall -Wextra` with zero warnings in our own code, and the suite is clean under AddressSanitizer/UndefinedBehaviorSanitizer (run `./engine_tests` for the current case and assertion counts). The TS side has 55 per-pass unit tests plus a differential test.
+All C++ tests pass under `-Wall -Wextra` with zero warnings in our own code (run `./engine_tests` for the current case and assertion counts — 4,608 assertions / 41 cases, measured on current `main`; the suite has also been run clean under AddressSanitizer/UndefinedBehaviorSanitizer by hand once, but that isn't wired into any script or CI). The TS side has 125 tests across 10 files: 55 per-pass golden tests, a 36-case shared parser-parity fixture, and a differential test (93 tests, 7 files, on the engine side), plus 32 frontend tests for the step-playback feature (issue #52).
 
 Each pass has one job, one input type, and one output type, and is unit-testable without the rest of the pipeline. Passes are plain functions chained by the pipeline (a `Pass<In, Out>` interface was sketched in the original design but is not used). The same `Automaton` shape covers the NFA, DFA and min-DFA stages.
 
@@ -177,7 +177,7 @@ Beyond hand-picked golden tests, the matcher's output is checked against a refer
 1. **Golden-value unit tests, per pass, in both languages.** Feed a known pattern, assert the exact expected AST shape / NFA state count / DFA state count / minimized state count. Ported 1:1 from TS (Vitest) to C++ (Catch2).
 2. **Pipeline-equivalence testing (C++).** A dedicated test proves `runPipeline()`'s output is byte-identical to manually chaining all 5 passes across a spread of patterns — the justification for trusting the wired-together entry point.
 3. **Differential testing, both languages.** C++ is fuzzed against `std::regex`; TypeScript is fuzzed against native `RegExp` (anchored for full-match). 2000 random (pattern, input) pairs per run. The TS test uses a seeded PRNG and prints the seed on failure so any mismatch is reproducible.
-4. **Sanitizers and warnings.** The C++ suite is built with strict warnings and run under AddressSanitizer and UndefinedBehaviorSanitizer.
+4. **Warnings.** The C++ suite is built with strict warnings (`-Wall -Wextra`), zero warnings in our own code. (Also run clean under AddressSanitizer/UndefinedBehaviorSanitizer once, by hand — real, but not wired into any script or CI, so not a repeatable check yet.)
 5. **Mutation discipline.** New tests are checked by breaking the implementation on purpose (invert a condition, drop a line) and confirming the test goes red before trusting it green.
 6. **Browser verification.** The three acceptance cases (`(a|b)*ab` on `aab` → match, on `aba` → no-match, `(ab` → `UnmatchedParen`) were verified end to end in a real browser against the real WASM build, and `scripts/check-wasm-limits.mjs` re-checks the guards on the built module.
 7. **Isomorphism-based equivalence testing** *(Hard Stretch, not Core)*. Two DFAs accept the same language iff their minimized forms are isomorphic.

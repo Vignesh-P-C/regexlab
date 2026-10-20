@@ -77,7 +77,7 @@ Legend: ✅ implemented in the current source · 🟡 integrated but needs a loc
 | WASM binding (`bindings.cpp`) + CMake Emscripten target | ✅ | `build-wasm/regexlab.js` and `.wasm` exist in this checkout; frontend expects copies under `frontend/public/wasm/` |
 | WASM limit probes (`scripts/check-wasm-limits.mjs`) | ✅ | Script exists; it expects the WASM files under the frontend public path |
 | Differential testing, C++ vs `std::regex` | ✅ | 2,000 (pattern, input) pairs per run |
-| Differential testing, TS side | ⛔ | No `engine/__tests__/differential/` directory |
+| Differential testing, TS side | ✅ | `engine/__tests__/differential.test.ts` exists and passes (vs native `RegExp`, anchored full-match); it's a file, not a `differential/` directory |
 | Frontend: loading hook, App, input, controls, SVG view | 🟡 | Source is wired end-to-end to the real engine; the generated files are currently not in `frontend/public/wasm/`, so the app will show its load error until copied there |
 | `SuggestionBanner` component | 🟡 | A stub; **not rendered anywhere** |
 | AI suggestion endpoint (`api/suggest.ts`) | ⛔ | File doesn't exist |
@@ -91,7 +91,7 @@ Legend: ✅ implemented in the current source · 🟡 integrated but needs a loc
 
 **Current-checkout clarifications**
 - The frontend integration is implemented, but app runtime also depends on the two generated WASM files being at the exact public paths it fetches. Those files are ignored by Git; this checkout has them in `build-wasm/`, not `frontend/public/wasm/`.
-- The previously recorded totals were 55 TypeScript tests (33 parser + 5 Thompson + 5 subset + 4 minimization + 8 matcher) and 4,517 C++ assertions across 40 Catch2 cases. They were not rerun during this guide refresh, so treat them as historical counts.
+- Measured fresh for this guide refresh (`npm ci` + `npx vitest run`; `cmake --build` + `./engine_tests`, on current `main`): **125 TypeScript tests across 10 files** — 93 engine-side (33 parser + 36 shared parser-parity fixture + 5 Thompson + 5 subset + 4 minimization + 8 matcher + 2 differential) plus 32 frontend tests for the step-playback feature, issue #52 (5 `playbackIndex` + 22 `steps` + 5 `PlaybackControls`) — and **4,608 C++ assertions across 41 Catch2 cases**. The previously recorded "55 tests" / "4,517 assertions across 40 cases" were stale: they omitted the parity fixture, the differential test, and the frontend tests entirely.
 - C++ `runPipeline` and the JSON bridge are implemented. The TypeScript side has individual passes and unit tests, but no TypeScript pipeline entry point or differential test suite.
 - There is no `api/suggest.ts`, no working AI suggestion flow, and no deployment configuration. `SuggestionBanner.tsx` exists only as an unwired stub.
 - The C++/WASM implementation is the production path. `engine/types.ts` comments and the root project brief still contain some original-plan text that describes syntax/architecture differently from the parser code; follow actual parser behavior as documented in §5.1.
@@ -140,7 +140,7 @@ regexlab/
 │   │   ├── pipeline.hpp, json_bridge.hpp
 │   │   └── passes/*.hpp
 │   └── __tests__/unit/             Vitest tests for the TS passes
-├── tests/                          Catch2 tests for the C++ engine (9 files)
+├── tests/                          Catch2 tests for the C++ engine (10 files)
 ├── frontend/                       React 19 + Vite 8 + TypeScript
 │   ├── src/App.tsx, main.tsx
 │   ├── src/hooks/useRegexEngine.ts
@@ -473,13 +473,13 @@ Implemented: loading, engine-load errors, parse errors, empty visualization stat
 ```powershell
 # TypeScript prototype — from the repository root
 npm install
-npm test                      # prior guide recorded 55 tests; not rerun in this refresh
+npm test                      # 125 tests / 10 files, measured fresh on current main
 npm run typecheck             # strict tsc, no emit
 
 # C++ engine (native) — from the repository root
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure # prior guide recorded 4517 assertions / 40 cases
+ctest --test-dir build -C Release --output-on-failure # 4,608 assertions / 41 cases, measured fresh on current main
 
 # WASM build — activate/use an Emscripten SDK environment first
 emcmake cmake -S . -B build-wasm -DCMAKE_BUILD_TYPE=Release

@@ -215,7 +215,7 @@ Each pass has one job, one input type, one output type, and is independently uni
 1. **Golden-value unit tests, per pass, in both languages — Core, done.** Exact expected AST shape / state counts for known patterns; ported 1:1 from Vitest to Catch2.
 2. **Pipeline-equivalence testing (C++) — done.** `runPipeline()` output is identical to manually chaining the five passes.
 3. **Differential testing — Core, done in both languages.** C++ vs `std::regex`; TypeScript vs native `RegExp` anchored as `^(?:…)$` (unanchored `RegExp.test()` is a partial-match oracle and would silently test the wrong thing). Random ASTs at depth ≤ 3 over the alphabet `abcd`, 2000 cases per run; the TS test is seeded and prints its seed on failure. These validate *matching semantics*; they cannot reach deep-nesting or large-pattern regimes, so size/nesting limits have their own guard tests.
-4. **Sanitizers and warnings — done.** Strict warnings, AddressSanitizer + UndefinedBehaviorSanitizer on the C++ suite.
+4. **Warnings — done.** Strict warnings (`-Wall -Wextra`) on the C++ suite. (Sanitizers: the suite has been run clean under AddressSanitizer/UndefinedBehaviorSanitizer once, by hand, but this is not wired into any script or CI, so "done" overstated it — no `-fsanitize` flag exists anywhere in the repo. Future work if you want this reproducible.)
 5. **Mutation discipline.** Don't trust a test just because it's green: break the implementation on purpose, confirm red, revert, confirm green.
 6. **Browser verification — done.** The three acceptance cases verified in a real browser against the real WASM build; `scripts/check-wasm-limits.mjs` re-probes the guards on any fresh build.
 7. **Isomorphism-based equivalence testing — Hard Stretch.** Two DFAs accept the same language iff their minimized forms are isomorphic. If the direct-method pass is built (§11), this becomes the natural cross-check against the Thompson route.
@@ -229,14 +229,14 @@ Each pass has one job, one input type, one output type, and is independently uni
 | Parsing | O(n) | O(n) | n = pattern length |
 | Thompson's construction | O(n) | O(n) | linear in AST size |
 | Subset construction | O(2^m) worst case | O(2^m) worst case | m = NFA states — name the exponential blowup, don't hide it |
-| Minimization (Moore's — Core) | O(n² · k) | O(n) | n = DFA states, k = alphabet size; fast under the 500-char cap |
+| Minimization (Moore's — Core) | O(n² · k) | O(n · k) | n = DFA states, k = alphabet size; `refine()` builds a length-k signature per state each pass, so working space is states × alphabet, not just states; fast under the 500-char cap |
 | Minimization (Hopcroft's — Hard Stretch) | O(n log n · k) | O(n) | only after Moore's is solid; otherwise a documented limitation |
 | Matching | O(n) per string | O(1) active state | why DFA matching beats naive backtracking engines |
 
 | Guard | Value | Behavior |
 |---|---|---|
-| Pattern length | 500 characters | `PatternTooComplex` at position 500 (both parsers) |
-| Nesting depth | 1000 levels of `(` | `PatternTooComplex` at position 1000 (both parsers) |
+| Pattern length | 500 characters | `PatternTooComplex` at position 500 — but only if the pattern's first 501 characters are all ASCII (both parsers). If a non-ASCII character appears in that window, the length cap doesn't fire; the leftmost error (that character's own `UnexpectedToken`) wins instead — see `exceedsLengthCap` in `parser-pass.ts`/`.cpp` |
+| Nesting depth | 1000 levels of `(` | `PatternTooComplex` at position 1000 (both parsers) — but under the default 500-char length cap, this is **unreachable in practice**: the parser never consumes more than 500 units before the length cap would already have fired, so depth 1000 can't be reached first. It's kept as defense in depth for if the length cap is ever relaxed (code comment says this explicitly) |
 | Alphabet | ASCII only | Non-ASCII byte in the *pattern* → `UnexpectedToken`; in the *test string* it just doesn't match |
 | WASM build | Release by default | `-O0` overflows the JS stack at nesting depth ≈ 172, before the guards can fire |
 
