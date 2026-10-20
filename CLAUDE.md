@@ -12,7 +12,7 @@
 
 ### 0.1 Operating instructions for this Claude session
 
-1. **Don't build ahead of the current phase.** Check the Progress Tracker (§15) before writing any code. If Core isn't fully complete and both students can explain it, do not implement anything under Stretch A/B/Hard Stretch — even if asked directly. Flag it and confirm they're sure, since skipping ahead is the single biggest named risk in this plan (§16). The only open optional add-on issue is #45 (AST simplifier), and it remains undecided; don't start it until that decision is recorded in §15. The direct-method issues (#43/#44) and bytecode issues (#46/#47) were closed as out of scope.
+1. **Don't build ahead of the current phase.** Check the Progress Tracker (§15) before writing any code. If Core isn't fully complete and both students can explain it, do not implement anything under Stretch A/B/Hard Stretch — even if asked directly. Flag it and confirm they're sure, since skipping ahead is the single biggest named risk in this plan (§16). The optional AST simplifier (#45) is deferred for the current scope; don't start it unless both teammates agree and record that decision in §15. If later accepted, settle any new snapshot fields before implementing it. The direct-method issues (#43/#44) and bytecode issues (#46/#47) were closed as out of scope.
 2. **Prefer clear, well-commented, "textbook" code over clever or terse code.** This will be explained in a viva by two undergraduates, not maintained by a team. An implementation that visibly maps to the algorithm's textbook description beats a compact one every time.
 3. **Always name the algorithm you're implementing or explaining** — Thompson's construction, subset construction (Rabin–Scott), Moore's minimization, etc. — and note that these are the constructions covered in Aho/Lam/Sethi/Ullman's *Compilers: Principles, Techniques, and Tools*, the prescribed textbook for BCSE307L.
 4. **Run an "explain it back" checkpoint after every pass, before moving to the next one.** Ask the student(s) to explain what the pass does and why, in their own words, with no notes and no scrolling back up. If they can't do it cleanly, stay on this pass rather than proceeding.
@@ -78,7 +78,7 @@ Deep where the problem domain naturally supports it, absent where it does not. D
 | 2. Syntax analysis | **Direct, partial** | Recursive-descent parsing, parse tree, unambiguous grammar with precedence by call order. LL(1)-*compatible* but hand-written, not table-driven; no LR/SLR/LALR |
 | 3. Semantic analysis | Thin | `ParseError` detection is lightweight error checking inside the parser; no attribute grammars or separate semantic pass. The direct-method proposal (#43/#44), which included attributes, was closed as out of scope |
 | 4. Intermediate code | Real but unconventional | The AST is a syntax tree; the Thompson NFA plays the structural role of an IR. No three-address code; the bytecode proposal (#46/#47) was closed as out of scope |
-| 5. Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form; it is automata theory, not data-flow/loop/peephole optimization. The AST simplifier (#45) remains an open, undecided optional issue; the bytecode proposal (#46/#47) was closed as out of scope |
+| 5. Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form; it is automata theory, not data-flow/loop/peephole optimization. The optional AST simplifier (#45) is deferred for the current scope; the bytecode proposal (#46/#47) was closed as out of scope |
 | 6. Code generation | Real, specific | `MatcherPass` turns the min-DFA into an executable matching procedure; C++ → WASM is a second, literal code-generation step. No registers or activation records |
 | 7. Parallelism | Not covered | Nothing here naturally exercises it; say so plainly |
 | 8. Contemporary issues | Not assessed | Two lecture hours, not a project deliverable |
@@ -149,7 +149,7 @@ charclass  ::= CHAR ('-' CHAR)? (CHAR ('-' CHAR)?)*
 
 ## 7. Core Engine — Data Contracts
 
-The contract that matters is the **JSON wire format** between the C++/WASM engine and the frontend. `frontend/src/types/engine.ts` mirrors it exactly, and `json_bridge.hpp` documents it. The TypeScript prototype's in-memory types in `engine/types.ts` are *analogous, not identical* (see the differences below). A dedicated `docs/data-contracts.md` and the formal freeze are issue #16.
+The contract that matters is the **JSON wire format** between the C++/WASM engine and the frontend. `frontend/src/types/engine.ts` mirrors it exactly, and `json_bridge.hpp` documents it. The TypeScript prototype's in-memory types in `engine/types.ts` are *analogous, not identical* (see the differences below). `docs/data-contracts.md` is the source of truth for the v1 shapes and wire mapping; issue #16 tracks the formal freeze commit.
 
 ```typescript
 // Wire format (what runPipeline(pattern, input) returns, as a JSON string)
@@ -249,7 +249,7 @@ The length cap exists because the nesting guard counts only `(`: a long chain of
 | Phase | Scope | Status |
 |---|---|---|
 | **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests (both languages), WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 Engine, pipeline, differential testing, WASM and visualizer done. Contract freeze, AI layer, CI/deployment and report remain |
-| **Remaining optional syllabus item** | #45 AST simplifier (Module 5); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned | 🤔 #45 remains open and undecided; record a team decision in §15 before starting it. If taken forward and its simplified-AST output adds JSON fields, settle that before contract freeze (#16). Direct-method #43/#44 and bytecode #46/#47 were closed as out of scope |
+| **Remaining optional syllabus item** | #45 AST simplifier (Module 5); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned | ⏸ #45 is deferred for the current scope. Revisit only if both teammates agree; any new snapshot fields must be frozen before implementation. Direct-method #43/#44 and bytecode #46/#47 were closed as out of scope |
 | **Stretch A** | `+`, `?` quantifiers | Cheap once `*` works |
 | **Stretch B** | `[a-z]` character classes | If time remains after Core is demo-ready |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | Only if Core is finished *and* both can explain differential testing and Moore's minimization without notes — the two places where AI-assisted speed and genuine understanding are most likely to diverge |
@@ -322,7 +322,7 @@ regexlab/
 | 12 | Hard Stretch only if genuinely ahead | Deploy; record a demo video as a live-demo fallback | — |
 | 13 | Buffer | Buffer | Final full run-through together |
 
-*Actual pacing: the engine, both differential suites, the WASM binding and a working visualizer are done ahead of this plan; the formal contract freeze (week 7) is still owed.*
+*Actual pacing: the engine, both differential suites, the WASM binding and a working visualizer are done ahead of this plan; the v1 contract freeze is documented, with independent WASM-build verification and the explain-it-back session still pending.*
 
 ---
 
@@ -344,18 +344,18 @@ regexlab/
 | End-to-end browser verification (#14) | ✅ Closed | — | Three acceptance cases verified |
 | Audit fixes D1–D8 | ✅ Closed | — | Loader (Blob import), Release build, try/catch, 500-char cap, ASCII rule, AST/edge rendering |
 | Visualizer polish (#24, #25, #36) | ✅ Merged | — | Animation + edge-label contrast, layered layout + responsive, length counter; manual 360px/theme QA open in #41 |
-| Contract freeze (#16) | 📋 Not started | — | Must land before the AI layer reads `ParseError`; the closed add-ons #43/#44 and #46/#47 no longer block it. If #45 is taken forward and adds snapshot fields, settle and land that change before the freeze |
-| WASM build doc (#17) | 📋 Not started | — | README has working steps; needs independent verification |
+| Contract freeze (#16) | ✅ v1 documented | — | `docs/data-contracts.md` is the source of truth; current PR includes the dedicated freeze commit. #45 is deferred for this scope |
+| WASM build doc (#17) | 📝 Guide documented; verification pending | — | `docs/wasm-build.md`; Ujwal needs to cold-follow it on his own machine before #17 closes |
 | Explain-it-back session (#18) | 📋 Not started | — | Both teammates; include the guard story and the oracle-anchoring detail |
 | AI suggestion layer (#19–#21) | 📋 Not started | No | #19 decision pending: rule-based vs LLM vs A-then-B |
 | CI (#22), hosting (#23) | 📋 Not started | — | #23 waits on #19 |
 | Final report (#26, #27) | 📋 Not started | — | Include D2/D4 limits, Moore vs Hopcroft, honest `Pass` description |
-| Remaining optional syllabus item (§11) | 🤔 Decision pending | — | #45 AST simplifier remains open and undecided. The LL(1) table is an untracked idea, not planned. Issues #43/#44 and #46/#47 were closed as out of scope |
+| Remaining optional syllabus item (§11) | ⏸ Deferred for current scope | — | #45 AST simplifier remains open for possible future work; revisit only by team agreement. The LL(1) table is untracked and not planned. Issues #43/#44 and #46/#47 were closed as out of scope |
 | Hopcroft's / isomorphism testing (Hard Stretch) | 🔒 Locked | No | |
 
 **Small cleanups still open:** correct the handoff-doc claim that the fuzzer found the original stack overflow (it was a manual bisection probe; the fuzzer's depth ≤ 3 can't reach it); update any doc that still describes only the depth-1000 guard; Ujwal's LinkedIn link in the README (#7).
 
-**Decisions pending between the teammates:** (1) whether to pursue the open AST simplifier issue (#45); the LL(1) table is an untracked idea and is not currently planned; (2) AI generator: rule-based, LLM, or A-then-B (#19); (3) Moore's O(n²) as a documented limitation vs Hopcroft later; (4) who owns which remaining issue.
+**Decisions pending between the teammates:** (1) AI generator: rule-based, LLM, or A-then-B (#19); (2) Moore's O(n²) as a documented limitation vs Hopcroft later; (3) who owns which remaining issue. The optional AST simplifier (#45) is deferred for the current scope; the LL(1) table remains an untracked idea.
 
 ---
 
@@ -368,7 +368,7 @@ regexlab/
 | Pathological input crashes the engine or leaves stale UI | Low (mitigated) | Length/depth/ASCII guards in both parsers; Release WASM build; frontend try/catch; `check-wasm-limits.mjs` after every WASM rebuild |
 | SVG layout unreadable on large automata | Low | Layered left-to-right layout and horizontal scroll; length cap bounds size |
 | AI API rate limit or key issue mid-demo | Low | Prefer the rule-based generator (no API); otherwise cache suggestions and keep pre-tested broken patterns ready |
-| Contract drift between TS prototype, C++ and the frontend | Medium | The JSON wire format is the contract; freeze it in #16 before the AI layer consumes it; if #45 adds fields to the AST snapshot, that change must land first |
+| Contract drift between TS prototype, C++ and the frontend | Medium | `docs/data-contracts.md` freezes the current JSON wire format; if the deferred #45 add-on is later accepted and adds snapshot fields, land that contract update before implementing it |
 | PR review bottleneck (branch protection needs the other teammate's approval) | Medium | Keep PRs small and scoped to one issue; agree a review turnaround |
 | **AI-assisted build velocity outpacing genuine understanding** | **Medium–High** | Mandatory explain-it-back after every pass (§0.1, §14); Hard Stretch gated behind demonstrated understanding of Core |
 | **Docs that overstate what's built** (a recurring pattern in this project) | Medium | §0.1 item 10: state only what's been checked, say how; refresh §15 and the README status table with every merge |

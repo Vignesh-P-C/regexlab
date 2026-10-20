@@ -75,7 +75,7 @@ All C++ tests pass under `-Wall -Wextra` with zero warnings in our own code, and
 
 Each pass has one job, one input type, and one output type, and is unit-testable without the rest of the pipeline. Passes are plain functions chained by the pipeline (a `Pass<In, Out>` interface was sketched in the original design but is not used). The same `Automaton` shape covers the NFA, DFA and min-DFA stages.
 
-**Data contracts.** `types.ts` and `types.hpp` are analogous, not identical: the TS prototype uses `Set`/`Map` and a `char` field, while the C++ side and the JSON sent to the browser use arrays/objects, `ch`, and `null` for missing values. The **JSON wire format** emitted by `json_bridge.cpp` and consumed by `frontend/src/types/engine.ts` is the contract that matters; its full description lives in the `json_bridge.hpp` doc comment (a dedicated `docs/data-contracts.md` is tracked in issue #16).
+**Data contracts.** `engine/types.ts` and `types.hpp` are analogous, not identical: the TS prototype uses `Set`/`Map` and a `char` field, while the JSON sent to the browser uses arrays/objects, `ch`, and `null` for missing values. The canonical descriptions of those in-memory shapes and the wire format consumed by `frontend/src/types/engine.ts` are in [docs/data-contracts.md](docs/data-contracts.md).
 
 ### Module Structure
 
@@ -115,6 +115,9 @@ regexlab/
 │   └── differential_test.cpp
 ├── scripts/
 │   └── check-wasm-limits.mjs                 # ✅ probes the built WASM module: acceptance cases + stack-depth robustness
+├── docs/
+│   ├── data-contracts.md                     # shared TS/C++ contracts and complete JSON wire format
+│   └── wasm-build.md                         # Emscripten build and frontend integration guide
 ├── frontend/                                 # ✅ React + Vite, verified end to end against the real WASM build
 │   ├── src/
 │   │   ├── App.tsx
@@ -221,7 +224,7 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 | 2 | Syntax analysis | **Direct, partial** | Recursive-descent parsing, parse tree (the AST), unambiguous grammar with precedence by call order. The grammar is LL(1)-compatible but the parser is hand-written, not table-driven. No LR/SLR/LALR |
 | 3 | Semantic analysis | Thin | `ParseError` detection is lightweight error checking inside the parser; no attribute grammars or separate semantic pass. The direct-method proposal (#43/#44), which included attributes, was closed as out of scope |
 | 4 | Intermediate code | Real but unconventional | The AST is a syntax tree; the Thompson NFA plays the structural role of an IR between parsing and matching. No three-address code; the bytecode proposal (#46/#47) was closed as out of scope |
-| 5 | Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form, but it is automata theory, not data-flow, loop or peephole optimization. The AST simplifier (#45) remains an open, undecided optional issue; the bytecode proposal (#46/#47) was closed as out of scope |
+| 5 | Code optimization | Same word, different technique | DFA minimization reduces a representation to its minimal equivalent form, but it is automata theory, not data-flow, loop or peephole optimization. The optional AST simplifier (#45) is deferred for the current scope; the bytecode proposal (#46/#47) was closed as out of scope |
 | 6 | Code generation | Real, specific | `MatcherPass` turns the min-DFA into an executable matching procedure; C++ → WASM is a second, literal code-generation step. No registers or activation records |
 | 7 | Parallelism | Not covered | Nothing in a regex engine naturally exercises this; stated plainly rather than forced |
 | 8 | Contemporary issues | Not assessed | — |
@@ -242,11 +245,11 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 | Differential testing | ✅ Complete in both languages (`std::regex` and native `RegExp` oracles) | Pending explain-it-back checkpoint |
 | WASM binding (Emscripten) | ✅ Complete — builds, ES-module output verified, limits probed by `scripts/check-wasm-limits.mjs` | — |
 | Visualizer | ✅ Working end to end in a browser (AST tree + NFA/DFA/min-DFA graphs with match-trace playback); polish merged (animation, layered responsive layout, input-length UX). Manual 360px and theme QA tracked in #41 | — |
-| Contract freeze (`docs/data-contracts.md`) | 📋 Not started (issue #16) | — |
+| Contract freeze (`docs/data-contracts.md`) | 📝 v1 spec and dedicated freeze commit included in the current PR (#16) | — |
 | AI suggestion layer + hard gate | 📋 Not started — design decision pending (issues #19–#21) | — |
 | CI + deployment | 📋 Not started (issues #22, #23) | — |
 | Final report | 📋 Not started (issues #26, #27) | — |
-| Optional AST simplifier (#45) | 🤔 Open; decision pending. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope; the LL(1) table is an untracked idea and is not currently planned | — |
+| Optional AST simplifier (#45) | ⏸ Deferred for the current scope. Revisit only if both teammates agree; any added snapshot output must be frozen before implementation. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope; the LL(1) table is an untracked idea and is not currently planned | — |
 | Hopcroft's / isomorphism testing (Hard Stretch) | 🔒 Locked until Core is done | — |
 
 ## Build Sequence
@@ -266,7 +269,7 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 | 12 | Hard Stretch, only if ahead of schedule | Deploy + demo video fallback | |
 | 13 | Buffer | Buffer | Final full run-through together |
 
-> **Note:** the engine work (all 5 passes, pipeline, both differential suites, WASM binding) is complete and the visualizer works end to end, ahead of the plan's original per-week pacing. The AI suggestion layer is now the largest unbuilt piece, followed by CI/deployment and the final report. The formal contract freeze (issue #16) is still owed and should land before the AI layer starts consuming `ParseError`.
+> **Note:** the engine work (all 5 passes, pipeline, both differential suites, WASM binding) is complete and the visualizer works end to end, ahead of the plan's original per-week pacing. The v1 contract freeze and WASM build guide are documented in the current PR; #17 still needs an independent cold build, and #18 still needs the explain-it-back session. The AI suggestion layer is the largest unbuilt piece, followed by CI/deployment and the final report.
 
 ---
 
@@ -287,24 +290,7 @@ npm test              # golden-value + differential tests via Vitest
 npm run typecheck     # strict TypeScript check, no emit
 ```
 
-**WASM module (needed to run the frontend with real data):**
-```bash
-# one-time setup
-git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
-cd ~/emsdk && ./emsdk install latest && ./emsdk activate latest
-
-# every session
-source ~/emsdk/emsdk_env.sh
-cd ~/regexlab
-mkdir -p build-wasm && cd build-wasm
-emcmake cmake ..                 # defaults to a Release build for the WASM target
-emmake make regexlab_wasm
-cp regexlab.js regexlab.wasm ../frontend/public/wasm/
-
-# optional: re-check the guards against the fresh build
-cd ~/regexlab && node scripts/check-wasm-limits.mjs
-```
-Run these from a native shell, not through a Windows UNC path (e.g. use the WSL terminal directly); `cmd.exe` cannot use `\\wsl.localhost\…` as a working directory. (A fuller, independently verified write-up is tracked in issue #17.)
+**WASM module (needed to run the frontend with real data):** Follow the [WASM build and frontend integration guide](docs/wasm-build.md) for Emscripten activation, the `regexlab_wasm` target, output paths, and frontend steps. Issue #17 remains open until someone other than the guide's author completes the documented cold build on their own machine.
 
 **Frontend:**
 ```bash
@@ -320,8 +306,8 @@ npm run dev       # needs regexlab.js / regexlab.wasm in frontend/public/wasm/
 
 | Phase | Scope | Status |
 |---|---|---|
-| **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests (both languages), WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 In progress — engine, pipeline, differential testing, WASM binding and visualizer done; contract freeze, AI layer, CI/deployment and report remain |
-| **Remaining optional syllabus item** | AST simplifier (#45); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope | 🤔 #45 remains open and undecided. If taken forward and its simplified-AST output adds JSON fields, settle that before contract freeze (#16) |
+| **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests (both languages), WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 In progress — engine, pipeline, differential testing, WASM binding, visualizer, and contract documentation done; #17 independent build verification, #18 walkthrough, AI layer, CI/deployment, and report remain |
+| **Remaining optional syllabus item** | AST simplifier (#45); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope | ⏸ #45 is deferred for the current scope; any future exposed snapshot fields must be agreed and frozen before implementation |
 | **Stretch A** | `+`, `?` quantifiers | 📋 Planned — cheap once `*` works |
 | **Stretch B** | `[a-z]` character classes | 📋 Planned — if time remains after Core is demo-ready |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | 🔒 Gated — only after Core is finished *and* both teammates can explain differential testing and Moore's minimization without notes |
