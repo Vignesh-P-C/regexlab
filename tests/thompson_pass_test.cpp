@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "regexlab/passes/parser-pass.hpp"
+#include "regexlab/character-set.hpp"
 #include "regexlab/passes/thompson-pass.hpp"
 #include "regexlab/types.hpp"
 
@@ -98,4 +99,34 @@ TEST_CASE("ThompsonPass — composition", "[thompson]") {
     auto flat = flatten(nfa);
     std::map<std::string, std::vector<int>> expectedState6 = {{"eps", {4, 7}}};
     REQUIRE(flat.at(6) == expectedState6);
+}
+
+
+TEST_CASE("ThompsonPass — plus requires one repetition", "[thompson][extended]") {
+    auto nfa = nfaFor("a+");
+    REQUIRE(nfa.stateCount == 4);
+    REQUIRE(nfa.startState == 2);
+    auto flat = flatten(nfa);
+    REQUIRE(flat.at(2).at("eps") == std::vector<int>{0});
+    REQUIRE(flat.at(1).at("eps") == std::vector<int>{0, 3});
+}
+
+TEST_CASE("ThompsonPass — optional has a skip branch", "[thompson][extended]") {
+    auto nfa = nfaFor("a?");
+    auto flat = flatten(nfa);
+    REQUIRE(flat.at(2).at("eps") == std::vector<int>{0, 3});
+    REQUIRE(flat.at(1).at("eps") == std::vector<int>{3});
+}
+
+TEST_CASE("ThompsonPass — character class stays one symbolic edge", "[thompson][extended]") {
+    auto nfa = nfaFor("[a-c]");
+    REQUIRE(nfa.stateCount == 2);
+    REQUIRE(flatten(nfa).at(0).at(encodeCharacterSet({97, 98, 99})) == std::vector<int>{1});
+}
+
+
+TEST_CASE("ThompsonPass — empty set has no unlabeled edge", "[thompson][extended]") {
+    const auto nfa = nfaFor(R"([^\x00-\x7f])");
+    REQUIRE(nfa.stateCount == 2);
+    REQUIRE(nfa.transitions.empty());
 }

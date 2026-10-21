@@ -36,7 +36,7 @@ export function PatternInput({ pattern, input, onPatternChange, onInputChange, e
           spellCheck={false}
         />
         <span className="field-meta">
-          <small>ASCII only, max {MAX_PATTERN_LENGTH} characters</small>
+          <small>ASCII · | concat · * + ? · . · [a-z] · \d \w \s · max {MAX_PATTERN_LENGTH}</small>
           <Counter length={pattern.length} max={MAX_PATTERN_LENGTH} />
         </span>
       </label>

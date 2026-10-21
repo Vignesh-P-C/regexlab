@@ -64,14 +64,14 @@ RegexLab is a compiler-design semester project: take a regex pattern as a raw st
 
 | Stage | Named algorithm | Input → Output | TS (prototype) | C++ (production) |
 |---|---|---|---|---|
-| `ParserPass` | Recursive-descent parsing | `string` → `AST` \| `ParseError` | ✅ 33 tests | ✅ Ported, all golden values match |
+| ParserPass | Recursive-descent parsing | string → AST or ParseError | ✅ Core + grammar v1 tests | ✅ TS/C++ parity and shared parser fixture |
 | `ThompsonPass` | Thompson's construction | `AST` → `NFA` | ✅ 5 tests | ✅ Ported, all golden values match |
 | `SubsetConstructionPass` | Subset construction (Rabin–Scott) | `NFA` → `DFA` | ✅ 5 tests | ✅ Ported, all golden values match |
 | `MinimizationPass` | Moore's minimization | `DFA` → `Min-DFA` | ✅ 4 tests | ✅ Ported, all golden values match |
 | `MatcherPass` | DFA-driven matching | `Min-DFA`, `string` → `MatchTrace` | ✅ 8 tests | ✅ Ported, all golden values match |
 | `pipeline` | Chains all 5 passes into one call | `string`, `string` → snapshot of every stage \| `ParseError` | — (TS chains passes directly in tests) | ✅ Complete — a test proves output is identical to manually chaining all 5 passes |
 
-All C++ tests pass under `-Wall -Wextra` with zero warnings in our own code (run `./engine_tests` for the current case and assertion counts — 4,608 assertions / 41 cases, measured on current `main`; the suite has also been run clean under AddressSanitizer/UndefinedBehaviorSanitizer by hand once, but that isn't wired into any script or CI). The TS side has 125 tests across 10 files: 55 per-pass golden tests, a 36-case shared parser-parity fixture, and a differential test (93 tests, 7 files, on the engine side), plus 32 frontend tests for the step-playback feature (issue #52).
+All C++ tests pass under the configured warning flags (run `./engine_tests` for the current case and assertion counts — 4,738 assertions / 51 cases, measured on the `pr64-followups` branch after the issue #64 alphabet-compression follow-up). The TS side has 161 tests across 11 files: 128 tests across 8 files on the engine side (33 parser, 5 Thompson, 5 subset construction, 4 minimization, 8 matcher, 12 extended-grammar golden tests, the 59-case shared parser-parity fixture, and a 2-test differential suite), plus 33 frontend tests across 3 files (5 playback-index tests, a 23-test step-playback differential suite, and 5 `PlaybackControls` component tests). TypeScript checks and tests run from the repository root.
 
 Each pass has one job, one input type, and one output type, and is unit-testable without the rest of the pipeline. Passes are plain functions chained by the pipeline (a `Pass<In, Out>` interface was sketched in the original design but is not used). The same `Automaton` shape covers the NFA, DFA and min-DFA stages.
 
@@ -137,7 +137,7 @@ regexlab/
 Each stage has one input type, one output type and its own tests, and the pipeline chains them — a deliberate echo of how LLVM structures its optimizer. Adding a capability (`+`/`?` quantifiers, character classes) means adding or extending a pass rather than rewriting the system.
 
 **Structural precedence, not a precedence table**
-The parser encodes `|` binding loosest, then concatenation, then `*`, purely through which grammar production calls which (`parseRegex` → `parseTerm` → `parseFactor` → `parseAtom`). Tighter-binding operators live deeper in the call chain — the standard recursive-descent technique from Aho/Lam/Sethi/Ullman.
+The parser encodes alternation as the loosest operator, concatenation next, and postfix star/plus/optional quantifiers as the tightest. This precedence is structural: parseRegex calls parseTerm, which calls parseFactor, which calls parseAtom. Exact syntax, ASCII sets, escaping, dot behavior, and unsupported constructs are defined in [the versioned grammar reference](docs/regex-grammar-v1.md).
 
 **TypeScript prototype, C++ production**
 The pipeline was built and validated in TypeScript first — cheap to iterate on, fast test loop. Once every pass had golden-value tests, it was re-implemented in C++, ported pass by pass against the TS reference, with every golden value carried into Catch2. If a bug existed in the algorithm itself, it would have to reproduce independently in two type systems and two test frameworks to slip through both.
@@ -320,12 +320,12 @@ npm run dev       # needs regexlab.js / regexlab.wasm in frontend/public/wasm/
 
 | Phase | Scope | Status |
 |---|---|---|
-| **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests (both languages), WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 In progress — engine, pipeline, differential testing, WASM binding and visualizer done; contract freeze, AI layer, CI/deployment and report remain |
+| **Core (must-ship)** | Grammar v1 (ASCII literals/sets, concat, alternation, star/plus/optional, dot, groups), pass pipeline (TS + C++), tests, WASM and visualizer | 🔄 Issue #60 extends the grammar; contract freeze, AI layer, CI/deployment and report remain |
 | **Remaining optional syllabus item** | AST simplifier (#45); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope | 🤔 #45 remains open and undecided. If taken forward and its simplified-AST output adds JSON fields, settle that before contract freeze (#16) |
-| **Stretch A** | `+`, `?` quantifiers | 📋 Planned — cheap once `*` works |
-| **Stretch B** | `[a-z]` character classes | 📋 Planned — if time remains after Core is demo-ready |
+| **Stretch A** | Plus and optional quantifiers | 🔄 Implemented, checkpoint pending — grammar v1 on the issue #60 branch; both teammates' explain-it-back (§0.1 rule 4) and the Progress Tracker (§15) entry are still owed |
+| **Stretch B** | ASCII character classes, ranges, negation, dot and shorthands | 🔄 Implemented, checkpoint pending — grammar v1 on the issue #60 branch; both teammates' explain-it-back (§0.1 rule 4) and the Progress Tracker (§15) entry are still owed |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | 🔒 Gated — only after Core is finished *and* both teammates can explain differential testing and Moore's minimization without notes |
-| **Explicitly out of scope** | Backreferences, lookahead/lookbehind | ❌ These break the regular-language guarantee — a theory-grounded scope decision, not an oversight |
+| **Explicitly out of scope for grammar v1** | Backreferences, lookaround, bounded repetition and zero-width anchors | Deliberately excluded; see [grammar v1](docs/regex-grammar-v1.md) |
 
 ---
 

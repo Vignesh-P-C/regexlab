@@ -1,303 +1,124 @@
-/**
- * ParserPass — CLAUDE.md v2 §8 (first stage of the pipeline)
- *
- * Algorithm: recursive-descent parsing, one function per grammar
- * production. This directly mirrors the "predictive parser" technique
- * from Aho/Lam/Sethi/Ullman (the prescribed BCSE307L textbook), applied
- * to the grammar in types.ts.
- *
- * Design choices worth being able to defend in a viva:
- *   - '|' binds loosest, then concatenation, then '*' — enforced purely
- *     by which grammar production calls which (parseRegex calls
- *     parseTerm calls parseFactor calls parseAtom), NOT by a precedence
- *     table. This is the textbook way recursive descent encodes
- *     precedence: tighter-binding operators live deeper in the call chain.
- *   - Both '|' (alt) and concatenation are built LEFT-ASSOCIATIVE here
- *     (a loop, not right-recursion) — e.g. "a|b|c" becomes
- *     alt(alt(a,b),c). This doesn't change the language accepted
- *     (both operations are associative for regular languages) but it's
- *     a concrete implementation choice you should be able to name.
- *   - Errors are thrown internally as ParseFailure and caught once at
- *     the top of parse(), so every recursive helper can stay simple and
- *     just "throw on trouble" instead of threading Result types through
- *     every call.
- *
- * ONE ADDITION BEYOND THE WRITTEN GRAMMAR: backslash-escaping (e.g. `\(`
- * matches a literal '('). The grammar's CHAR production doesn't exclude
- * this, but it's not spelled out either — flagging it explicitly per
- * CLAUDE.md v2 §0.1 rule 5. It's cheap (a few lines) and lets you write
- * test patterns that contain literal metacharacters. Remove it if you'd
- * rather stay strictly literal to the grammar as written.
- */
-
+/** Recursive-descent parser for RegexLab's versioned ASCII regex grammar. */
 import type { ASTNode, ParseError, ParseResult } from "../types.js";
-
-class ParseFailure extends Error {
-  constructor(public readonly parseError: ParseError) {
-    super(`${parseError.type} at position ${parseError.position}`);
-  }
-}
-
-/**
- * Safety limits on what the parser will accept. Mirrors ParseLimits in
- * parser-pass.hpp. Production code uses the defaults; the parameter exists
- * so tests can lift one limit to exercise the other (under default limits the
- * parser never consumes more than maxPatternLength units — see
- * exceedsLengthCap — so the depth guard is unreachable and is kept as
- * defense in depth).
- */
+class ParseFailure extends Error { readonly parseError: ParseError; constructor(parseError: ParseError) { super(parseError.type); this.parseError = parseError; } }
 export const DEFAULT_MAX_PATTERN_LENGTH = 500;
 export const DEFAULT_MAX_NESTING_DEPTH = 1000;
-
-export type ParseLimits = {
-  maxPatternLength: number;
-  maxNestingDepth: number;
-};
-
-const DEFAULT_LIMITS: ParseLimits = {
-  maxPatternLength: DEFAULT_MAX_PATTERN_LENGTH,
-  maxNestingDepth: DEFAULT_MAX_NESTING_DEPTH,
-};
-
+export type ParseLimits = { maxPatternLength: number; maxNestingDepth: number };
+const DEFAULT_LIMITS: ParseLimits = { maxPatternLength: DEFAULT_MAX_PATTERN_LENGTH, maxNestingDepth: DEFAULT_MAX_NESTING_DEPTH };
+type ClassAtom = { characters: number[]; singleton: boolean };
+const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+const ascii = range(0, 127), digits = range(48, 57), word = [...range(65, 90), ...digits, 95, ...range(97, 122)].sort((a, b) => a - b), whitespace = [9, 10, 11, 12, 13, 32];
 class Parser {
-  // Two guards keep recursion bounded (mirrors parser-pass.cpp):
-  //  - maxNestingDepth: thousands of '(' in a row fail as a normal
-  //    ParseError instead of blowing the call stack.
-  //  - maxPatternLength: the depth guard only counts '(', but long chains of
-  //    plain concatenation/alternation build equally deep ASTs (depth =
-  //    pattern length). 500 is sized from measurements (see issue #29 and
-  //    the comment in parser-pass.cpp). It applies to an all-ASCII prefix
-  //    only — see exceedsLengthCap for why.
-
-  private pos = 0;
-  private depth = 0;
-
-  constructor(
-    private readonly pattern: string,
-    private readonly limits: ParseLimits,
-  ) {}
-
-  private peek(): string | undefined {
-    return this.pattern[this.pos];
-  }
-
-  private advance(): string {
-    return this.pattern[this.pos++];
-  }
-
-  /** regex ::= term ('|' term)* */
-  private parseRegex(): ASTNode {
-    let node = this.parseTerm();
-    while (this.peek() === "|") {
-      this.advance();
-      const right = this.parseTerm();
-      node = { kind: "alt", left: node, right };
-    }
-    return node;
-  }
-
-  /** term ::= factor+  (one or more factors, concatenated) */
-  private parseTerm(): ASTNode {
-    let node = this.parseFactor();
-    while (this.canStartFactor()) {
-      const right = this.parseFactor();
-      node = { kind: "concat", left: node, right };
-    }
-    return node;
-  }
-
-  /**
-   * Does the length cap apply to this pattern?
-   *
-   * The cap counts units, and the two engines count different ones: TS counts
-   * UTF-16 code units, C++ counts UTF-8 bytes. Comparing a raw length against
-   * the cap therefore diverged on non-ASCII input — "é" x 300 is 300 units but
-   * 600 bytes: TS passed the length check then returned UnexpectedToken@0,
-   * while the old C++ byte check returned PatternTooComplex@500 before parsing
-   * (length cap: issue #29 / PR #33; ASCII-only rule: issue #30).
-   *
-   * The fix is to apply the cap only to an all-ASCII prefix. Inside such a
-   * prefix one unit is exactly one byte, so both engines measure the same
-   * thing and the divergence disappears by construction.
-   *
-   * Skipping the cap is safe: positions 0..cap are then known to contain a
-   * non-ASCII unit, and requireAscii rejects the first one the parser reaches,
-   * so at most `cap` units are ever consumed and recursion stays bounded no
-   * matter how long the rest of the pattern is. Verified in both engines for
-   * literals, groups and escapes.
-   *
-   * Mirrors exceedsLengthCap in parser-pass.cpp.
-   */
+  private pos = 0; private depth = 0;
+  constructor(private readonly pattern: string, private readonly limits: ParseLimits) {}
+  private peek(offset = 0): string | undefined { return this.pattern[this.pos + offset]; }
+  private advance(): string { return this.pattern[this.pos++]; }
+  private fail(type: ParseError["type"], position: number, expected: string, found: string): never { throw new ParseFailure({ type, position, expected, found }); }
   private exceedsLengthCap(): boolean {
     const cap = this.limits.maxPatternLength;
     if (this.pattern.length <= cap) return false;
-    // pattern.length > cap, so indices 0..cap all exist.
-    for (let i = 0; i <= cap; i++) {
-      if (this.pattern.charCodeAt(i) > 0x7f) return false;
-    }
+    for (let i = 0; i <= cap; i++) if (this.pattern.charCodeAt(i) > 127) return false;
     return true;
   }
-
-  /**
-   * The engine's alphabet is ASCII (code units 0x00-0x7F). A unit > 0x7F is
-   * rejected where a literal would be consumed, so the leftmost error in the
-   * pattern still wins. Mirrors requireAscii in parser-pass.cpp; `found` is a
-   * fixed description, never the raw character (see D4).
-   */
-  private requireAscii(c: string, position: number): void {
-    if (c.charCodeAt(0) > 0x7f) {
-      throw new ParseFailure({
-        type: "UnexpectedToken",
-        position,
-        expected: "an ASCII character",
-        found: "non-ASCII character",
-      });
-    }
+  private requireAscii(c: string, at: number): void { if (c.charCodeAt(0) > 127) this.fail("UnexpectedToken", at, "an ASCII character", "non-ASCII character"); }
+  private parseRegex(): ASTNode {
+    let node = this.parseTerm();
+    while (this.peek() === "|") { this.advance(); node = { kind: "alt", left: node, right: this.parseTerm() }; }
+    return node;
   }
-
-  /** Lookahead helper: could the next token legally start a new factor? */
-  private canStartFactor(): boolean {
-    const c = this.peek();
-    return c !== undefined && c !== "|" && c !== ")";
+  private parseTerm(): ASTNode {
+    let node = this.parseFactor();
+    while (this.peek() !== undefined && this.peek() !== "|" && this.peek() !== ")") node = { kind: "concat", left: node, right: this.parseFactor() };
+    return node;
   }
-
-  /** factor ::= atom quantifier?   (quantifier restricted to '*' in Core scope) */
   private parseFactor(): ASTNode {
-    const atom = this.parseAtom();
-    if (this.peek() === "*") {
+    const child = this.parseAtom(), q = this.peek();
+    if (q === "*" || q === "+" || q === "?") {
       this.advance();
-      return { kind: "star", child: atom };
+      return q === "*" ? { kind: "star", child } : q === "+" ? { kind: "plus", child } : { kind: "optional", child };
     }
-    return atom;
+    return child;
   }
-
-  /**
-   * atom ::= CHAR | '(' regex ')'
-   * ('[' charclass ']' is Stretch B — not implemented yet, see types.ts)
-   */
   private parseAtom(): ASTNode {
     const c = this.peek();
-
-    if (c === undefined) {
-      throw new ParseFailure({
-        type: "UnexpectedToken",
-        position: this.pos,
-        expected: "a character or '('",
-        found: "end of input",
-      });
-    }
-
+    if (c === undefined) this.fail("UnexpectedToken", this.pos, "a character or '('", "end of input");
     if (c === "(") {
-      const openParenPos = this.pos;
-      this.advance();
-
-      if (this.peek() === ")") {
-        throw new ParseFailure({
-          type: "EmptyGroup",
-          position: this.pos,
-          expected: "a pattern before ')'",
-          found: ")",
-        });
-      }
-
-      if (++this.depth > this.limits.maxNestingDepth) {
-        throw new ParseFailure({
-          type: "PatternTooComplex",
-          position: openParenPos,
-          expected: `nesting depth <= ${this.limits.maxNestingDepth}`,
-          found: "deeper group nesting",
-        });
-      }
-      const inner = this.parseRegex();
-      this.depth--;
-
-      if (this.peek() !== ")") {
-        throw new ParseFailure({
-          type: "UnmatchedParen",
-          position: openParenPos,
-          expected: "')'",
-          found: this.peek() ?? "end of input",
-        });
-      }
-      this.advance(); // consume ')'
-      return inner;
+      const open = this.pos; this.advance();
+      if (this.peek() === ")") this.fail("EmptyGroup", this.pos, "a pattern before ')'", ")");
+      if (++this.depth > this.limits.maxNestingDepth) this.fail("PatternTooComplex", open, `nesting depth <= ${this.limits.maxNestingDepth}`, "deeper group nesting");
+      const inner = this.parseRegex(); this.depth--;
+      if (this.peek() !== ")") this.fail("UnmatchedParen", open, "')'", this.peek() ?? "end of input");
+      this.advance(); return inner;
     }
-
-    if (c === "|" || c === "*" || c === ")") {
-      // An operator appearing where an atom was expected has nothing to
-      // apply to — e.g. "*ab", "a||b", "a**" (second '*'), "()" handled above.
-      throw new ParseFailure({
-        type: "DanglingOperator",
-        position: this.pos,
-        expected: "a character or '('",
-        found: c,
-      });
-    }
-
-    if (c === "\\") {
-      const escapePos = this.pos;
-      this.advance();
-      const escaped = this.peek();
-      if (escaped === undefined) {
-        throw new ParseFailure({
-          type: "UnexpectedToken",
-          position: escapePos,
-          expected: "a character after '\\'",
-          found: "end of input",
-        });
-      }
-      this.requireAscii(escaped, this.pos);
-      this.advance();
-      return { kind: "char", value: escaped };
-    }
-
-    this.requireAscii(c, this.pos);
-    this.advance();
-    return { kind: "char", value: c };
+    if (c === "[") return this.parseCharacterClass();
+    if (c === ".") { this.advance(); return { kind: "charset", characters: ascii.filter((x) => x !== 10 && x !== 13), label: "." }; }
+    if (c === "|" || c === "*" || c === "+" || c === "?" || c === ")") this.fail("DanglingOperator", this.pos, "a character or '('", c);
+    if (c === "\\") return this.parseEscape().node;
+    this.requireAscii(c, this.pos); this.advance(); return { kind: "char", value: c };
   }
-
+  private shorthand(c: string): number[] | null {
+    switch (c) {
+      case "d": return digits; case "w": return word; case "s": return whitespace;
+      case "D": return ascii.filter((x) => !digits.includes(x));
+      case "W": return ascii.filter((x) => !word.includes(x));
+      case "S": return ascii.filter((x) => !whitespace.includes(x));
+      default: return null;
+    }
+  }
+  private parseEscape(): { node: ASTNode; atom: ClassAtom } {
+    const slash = this.pos; this.advance(); const c = this.peek();
+    if (c === undefined) this.fail("UnexpectedToken", slash, "a character after '\\'", "end of input");
+    this.requireAscii(c, this.pos); this.advance();
+    const set = this.shorthand(c);
+    if (set) return { node: { kind: "charset", characters: set, label: `\\${c}` }, atom: { characters: set, singleton: false } };
+    if (c === "x") {
+      const text = this.pattern.slice(this.pos, this.pos + 2);
+      if (text.length !== 2 || !/^[0-9a-fA-F]{2}$/.test(text)) this.fail("UnexpectedToken", slash, "two hex digits after '\\x'", text || "end of input");
+      const code = Number.parseInt(text, 16); this.pos += 2;
+      if (code > 127) this.fail("UnexpectedToken", slash, "an ASCII escape", "non-ASCII character");
+      return { node: { kind: "char", value: String.fromCharCode(code) }, atom: { characters: [code], singleton: true } };
+    }
+    const controls: Record<string, number> = { n: 10, r: 13, t: 9, v: 11, f: 12 };
+    const code = controls[c] ?? c.charCodeAt(0);
+    return { node: { kind: "char", value: String.fromCharCode(code) }, atom: { characters: [code], singleton: true } };
+  }
+  private classAtom(open: number): ClassAtom {
+    if (this.peek() === undefined) this.fail("InvalidCharacterClass", open, "a closing ']'", "end of input");
+    if (this.peek() === "\\") return this.parseEscape().atom;
+    const c = this.peek()!, at = this.pos; this.requireAscii(c, at); this.advance();
+    return { characters: [c.charCodeAt(0)], singleton: true };
+  }
+  private parseCharacterClass(): ASTNode {
+    const open = this.pos; this.advance(); const negated = this.peek() === "^"; if (negated) this.advance();
+    const set = new Set<number>(); let members = 0;
+    while (this.peek() !== "]") {
+      if (this.peek() === undefined) this.fail("InvalidCharacterClass", open, "a closing ']'", "end of input");
+      const first = this.classAtom(open);
+      if (first.singleton && first.characters[0] !== 45 && this.peek() === "-" && this.peek(1) !== "]" && this.peek(1) !== undefined) {
+        const dash = this.pos; this.advance(); const last = this.classAtom(open);
+        if (!last.singleton || first.characters[0] > last.characters[0]) this.fail("InvalidCharacterClass", dash, "an ascending range with single-character endpoints", "invalid range");
+        for (let x = first.characters[0]; x <= last.characters[0]; x++) set.add(x);
+      } else first.characters.forEach((x) => set.add(x));
+      members++;
+    }
+    if (!members) this.fail("InvalidCharacterClass", open, "at least one class member", "empty character class");
+    this.advance();
+    const chars = negated ? ascii.filter((x) => !set.has(x)) : [...set].sort((a, b) => a - b);
+    return { kind: "charset", characters: chars, label: this.pattern.slice(open, this.pos) };
+  }
   parse(): ParseResult {
     try {
-      if (this.exceedsLengthCap()) {
-        throw new ParseFailure({
-          type: "PatternTooComplex",
-          position: this.limits.maxPatternLength,
-          expected: `pattern length <= ${this.limits.maxPatternLength}`,
-          found: "longer pattern",
-        });
-      }
-
+      if (this.exceedsLengthCap()) this.fail("PatternTooComplex", this.limits.maxPatternLength, `pattern length <= ${this.limits.maxPatternLength}`, "longer pattern");
       const ast = this.parseRegex();
-
       if (this.pos < this.pattern.length) {
         const c = this.pattern[this.pos];
-        if (c === ")") {
-          throw new ParseFailure({
-            type: "UnmatchedParen",
-            position: this.pos,
-            expected: "end of input",
-            found: ")",
-          });
-        }
-        throw new ParseFailure({
-          type: "UnexpectedToken",
-          position: this.pos,
-          expected: "end of input",
-          found: c,
-        });
+        if (c === ")") this.fail("UnmatchedParen", this.pos, "end of input", ")");
+        this.fail("UnexpectedToken", this.pos, "end of input", c);
       }
-
       return { ok: true, ast };
-    } catch (e) {
-      if (e instanceof ParseFailure) {
-        return { ok: false, error: e.parseError };
-      }
-      throw e;
-    }
+    } catch (e) { if (e instanceof ParseFailure) return { ok: false, error: e.parseError }; throw e; }
   }
 }
-
-/** ParserPass entry point: string in, ParseResult out. Pure, no side effects. */
 export function parse(pattern: string, limits: Partial<ParseLimits> = {}): ParseResult {
   return new Parser(pattern, { ...DEFAULT_LIMITS, ...limits }).parse();
 }

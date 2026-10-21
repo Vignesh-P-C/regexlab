@@ -29,9 +29,27 @@
  *
  * A DFA state is an accept state iff the NFA-state-set it represents
  * contains at least one of the original NFA's accept states.
+ *
+ * Grammar v1 addition (issue #60, docs/regex-grammar-v1.md): a
+ * CharacterSetNode compiles (in ThompsonPass) to ONE NFA edge labeled
+ * with its whole ASCII set (the "cs:" encoding — see character-set.ts),
+ * not one edge per matching character. THIS pass is where that
+ * compactness goes away again: alphabetOf() below decodes every "cs:"
+ * label it finds into its individual ASCII characters and adds each one
+ * to the DFA's alphabet, and move() uses transitionMatches() so a single
+ * "cs:" edge answers "yes" to every character it covers. The DFA that
+ * comes out the other end therefore has one transition per ASCII
+ * character, exactly like it always did for plain literals — the "cs:"
+ * form is purely an NFA-level space-saving trick, invisible from here
+ * downstream. The cost of that: a wide class (e.g. `.`, ~126 codes) makes
+ * the DFA's alphabet ~126 symbols wide instead of ~1, which is exactly
+ * the quantity MinimizationPass's alphabet compression (see
+ * minimization-pass.ts) exists to claw back before Moore's refinement
+ * has to pay O(alphabetSize) per state per round for it.
  */
 
 import type { Automaton } from "../types.js";
+import { decodeCharacterSet, transitionMatches } from "../character-set.js";
 
 function epsilonClosure(nfa: Automaton, states: Iterable<number>): Set<number> {
   const closure = new Set<number>(states);
@@ -49,21 +67,43 @@ function epsilonClosure(nfa: Automaton, states: Iterable<number>): Set<number> {
   return closure;
 }
 
+/**
+ * Unlike the pre-grammar-v1 version, this can't just look up
+ * `nfa.transitions.get(state)?.get(symbol)` directly: `symbol` is always
+ * a single ASCII character (see alphabetOf), but the NFA edge that
+ * matches it might be labeled with that literal character OR with a
+ * "cs:" set that happens to include it. transitionMatches() (see
+ * character-set.ts) is what tells the two apart.
+ */
 function move(nfa: Automaton, states: Iterable<number>, symbol: string): Set<number> {
   const result = new Set<number>();
   for (const state of states) {
-    const targets = nfa.transitions.get(state)?.get(symbol) ?? [];
-    for (const target of targets) result.add(target);
+    for (const [label, targets] of nfa.transitions.get(state) ?? []) {
+      if (transitionMatches(label, symbol)) {
+        for (const target of targets) result.add(target);
+      }
+    }
   }
   return result;
 }
 
-/** The input alphabet is every symbol the NFA transitions on, excluding "eps". */
+/**
+ * The input alphabet is every symbol the NFA transitions on, excluding
+ * "eps" — expanded one ASCII character at a time, even for symbols that
+ * arrived compacted as a "cs:" set. See this file's header comment for
+ * why that expansion happens here and what it costs downstream.
+ */
 function alphabetOf(nfa: Automaton): string[] {
   const symbols = new Set<string>();
   for (const bySymbol of nfa.transitions.values()) {
-    for (const symbol of bySymbol.keys()) {
-      if (symbol !== "eps") symbols.add(symbol);
+    for (const label of bySymbol.keys()) {
+      if (label === "eps") continue;
+      const characterSet = decodeCharacterSet(label);
+      if (characterSet) {
+        for (const code of characterSet) symbols.add(String.fromCharCode(code));
+      } else if (label.length === 1) {
+        symbols.add(label);
+      }
     }
   }
   return [...symbols].sort();

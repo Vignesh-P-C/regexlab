@@ -32,7 +32,7 @@ const fixture = fixtureJson as unknown as { cases: FixtureCase[] };
 describe("ParserPass — shared parity fixture", () => {
   it("the fixture is non-empty (a silently empty table would pass vacuously)", () => {
     // The fixture currently holds 35 cases; raise this guard whenever cases are added.
-    expect(fixture.cases.length).toBeGreaterThanOrEqual(35);
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(56);
   });
 
   for (const c of fixture.cases) {

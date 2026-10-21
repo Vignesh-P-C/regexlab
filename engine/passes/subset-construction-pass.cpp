@@ -7,8 +7,15 @@
 // the ported golden test values (exact DFA state numbers) match the TS
 // version — see subset-construction-pass.ts's header comment for the
 // full algorithm rationale, identical here.
+//
+// Grammar v1 addition (issue #60, docs/regex-grammar-v1.md): see
+// subset-construction-pass.ts's header comment for why alphabetOf() below
+// decodes every "cs:" label into individual ASCII characters, and why
+// move() needs transitionMatches() instead of a direct map lookup — this
+// file mirrors that logic exactly.
 
 #include "regexlab/passes/subset-construction-pass.hpp"
+#include "regexlab/character-set.hpp"
 
 #include <algorithm>
 #include <sstream>
@@ -40,25 +47,47 @@ std::unordered_set<int> epsilonClosure(const Automaton& nfa,
     return closure;
 }
 
+/**
+ * Unlike the pre-grammar-v1 version, this can't just look up a symbol
+ * directly in the transitions map: `symbol` is always a single ASCII
+ * character (see alphabetOf), but the NFA edge that matches it might be
+ * labeled with that literal character OR with a "cs:" set that happens
+ * to include it. transitionMatches() (see character-set.hpp) is what
+ * tells the two apart.
+ */
 std::unordered_set<int> move(const Automaton& nfa, const std::unordered_set<int>& states,
                               const std::string& symbol) {
     std::unordered_set<int> result;
     for (int state : states) {
         auto stateIt = nfa.transitions.find(state);
         if (stateIt == nfa.transitions.end()) continue;
-        auto symIt = stateIt->second.find(symbol);
-        if (symIt == stateIt->second.end()) continue;
-        for (int target : symIt->second) result.insert(target);
+        for (const auto& [label, targets] : stateIt->second) {
+            if (transitionMatches(label, symbol[0])) {
+                for (int target : targets) result.insert(target);
+            }
+        }
     }
     return result;
 }
 
-/** The input alphabet is every symbol the NFA transitions on, excluding "eps". */
+/**
+ * The input alphabet is every symbol the NFA transitions on, excluding
+ * "eps" — expanded one ASCII character at a time, even for symbols that
+ * arrived compacted as a "cs:" set. See this file's header comment for
+ * why that expansion happens here and what it costs downstream.
+ */
 std::vector<std::string> alphabetOf(const Automaton& nfa) {
     std::unordered_set<std::string> symbols;
     for (const auto& [state, bySymbol] : nfa.transitions) {
-        for (const auto& [symbol, targets] : bySymbol) {
-            if (symbol != "eps") symbols.insert(symbol);
+        for (const auto& [label, targets] : bySymbol) {
+            if (label == "eps") continue;
+            if (isCharacterSetLabel(label)) {
+                for (int code : decodeCharacterSet(label)) {
+                    symbols.insert(std::string(1, static_cast<char>(code)));
+                }
+            } else if (label.size() == 1) {
+                symbols.insert(label);
+            }
         }
     }
     std::vector<std::string> result(symbols.begin(), symbols.end());

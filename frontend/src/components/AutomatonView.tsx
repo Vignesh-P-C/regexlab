@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ASTNode, Automaton, Stage } from "../types/engine";
 import { postOrderAstNodes } from "../lib/steps";
+import { formatTransitionSymbols } from "../../../engine/character-set.js";
 
 type Props = {
   stage: Stage;
@@ -34,7 +35,7 @@ const NODE_R = 20;
 
 type Point = { x: number; y: number };
 /** The engine calls the empty transition "eps"; draw it as the textbook symbol. */
-const symbolLabel = (symbol: string) => (symbol === "eps" ? "ε" : symbol);
+
 
 type GraphEdge = { from: number; to: number; symbols: string[] };
 
@@ -217,7 +218,7 @@ function AutomatonGraph({
       {edges.map((e) => {
         const a = positions[e.from];
         const b = positions[e.to];
-        const label = e.symbols.map(symbolLabel).join(",");
+        const label = formatTransitionSymbols(e.symbols);
         const key = `${e.from}>${e.to}`;
         if (e.from === e.to) {
           // The loop sits above its state, unless an edge already leaves or enters
@@ -313,12 +314,12 @@ function AstTree({ node, highlightNodeIndex }: { node: ASTNode; highlightNodeInd
   function layout(n: ASTNode, depth: number): Positioned {
     maxDepth = Math.max(maxDepth, depth);
     const y = 40 + depth * LEVEL_HEIGHT;
-    if (n.kind === "char") {
+    if (n.kind === "char" || n.kind === "charset") {
       const x = 40 + nextLeafX * LEAF_SPACING;
       nextLeafX += 1;
       return { node: n, x, y, children: [] };
     }
-    if (n.kind === "star") {
+    if (n.kind === "star" || n.kind === "plus" || n.kind === "optional") {
       const child = layout(n.child, depth + 1);
       return { node: n, x: child.x, y, children: [child] };
     }
@@ -344,8 +345,13 @@ function AstTree({ node, highlightNodeIndex }: { node: ASTNode; highlightNodeInd
     }
   })(root);
 
-  const label = (n: ASTNode) =>
-    n.kind === "char" ? `'${n.value}'` : n.kind === "concat" ? "\u00b7" : n.kind === "alt" ? "|" : "*";
+  const label = (n: ASTNode) => {
+    if (n.kind === "char") return "'" + n.value + "'";
+    if (n.kind === "charset") return n.label;
+    if (n.kind === "concat") return "\\u00b7";
+    if (n.kind === "alt") return "|";
+    return n.kind === "star" ? "*" : n.kind === "plus" ? "+" : "?";
+  };
 
   // #52: highlightNodeIndex is a postOrderAstNodes index (the same order
   // computeAstSteps walks) -- not this component's own `nodes` array

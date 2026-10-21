@@ -25,7 +25,19 @@ PipelineResult runPipeline(const std::string& pattern, const std::string& input)
 
     Automaton nfa = thompsonConstruction(parsed.ast);
     Automaton dfa = subsetConstruction(nfa);
-    Automaton minDfa = minimize(dfa);
+
+    Automaton minDfa;
+    try {
+        minDfa = minimize(dfa);
+    } catch (const MinimizationTooComplex& failure) {
+        // Same short-circuit shape as the parse-failure branch above:
+        // minimize()'s work-budget safety net tripped, so MatcherPass
+        // never runs either. See minimization-pass.cpp for why this can
+        // happen and how the threshold was chosen.
+        return PipelineResult{false, nullptr, Automaton{}, Automaton{},
+                               Automaton{},    MatchTrace{}, failure.error()};
+    }
+
     MatchTrace trace = match(minDfa, input);
 
     // Every intermediate stage is carried through, not just the final
