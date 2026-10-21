@@ -20,4 +20,13 @@ EMSCRIPTEN_BINDINGS(regexlab_module) {
     // The frontend JSON.parse()s the result — see json_bridge.hpp for the
     // exact shape contract.
     emscripten::function("runPipeline", &regexlab::runPipelineJson);
+
+    // issue #68 — Subset Growth / NFA Structure Lab (PR A). Deliberately
+    // separate exports, not folded into runPipeline(): these do real
+    // extra work (a second subset construction, product-BFS equivalence
+    // checking) and must only run when the learner explicitly opens the
+    // Growth panel or requests a what-if check — never on every
+    // keystroke. See json_bridge.hpp for the exact JSON shapes.
+    emscripten::function("runGrowthAnalysis", &regexlab::runGrowthAnalysisJson);
+    emscripten::function("verifyCandidate", &regexlab::verifyCandidateJson);
 }

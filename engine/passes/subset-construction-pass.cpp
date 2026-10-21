@@ -169,4 +169,96 @@ Automaton subsetConstruction(const Automaton& nfa) {
     return dfa;
 }
 
+namespace {
+std::vector<int> sortedStates(const std::unordered_set<int>& states) {
+    std::vector<int> result(states.begin(), states.end());
+    std::sort(result.begin(), result.end());
+    return result;
+}
+}  // namespace
+
+TracedSubsetConstruction subsetConstructionTraced(const Automaton& nfa) {
+    std::vector<std::string> alphabet = alphabetOf(nfa);
+
+    std::vector<std::unordered_set<int>> stateSets;
+    std::unordered_map<std::string, int> idBySetKey;
+    std::unordered_map<int, std::unordered_map<std::string, std::vector<int>>> transitions;
+    std::vector<SubsetConstructionStep> steps;
+
+    auto idFor = [&](const std::unordered_set<int>& nfaStateSet) -> std::pair<int, bool> {
+        std::string key = setKey(nfaStateSet);
+        auto it = idBySetKey.find(key);
+        if (it != idBySetKey.end()) return {it->second, false};
+        int id = static_cast<int>(stateSets.size());
+        idBySetKey[key] = id;
+        stateSets.push_back(nfaStateSet);
+        return {id, true};
+    };
+
+    int startState = idFor(epsilonClosure(nfa, {nfa.startState})).first;
+
+    std::unordered_set<int> processed;
+    std::vector<int> worklist = {startState};
+
+    while (!worklist.empty()) {
+        int current = worklist.back();
+        worklist.pop_back();
+        if (processed.count(current)) continue;
+        processed.insert(current);
+
+        for (const std::string& symbol : alphabet) {
+            const std::unordered_set<int>& sourceNfaStates = stateSets[current];
+            std::unordered_set<int> moved = move(nfa, sourceNfaStates, symbol);
+            if (moved.empty()) continue;
+
+            std::unordered_set<int> closure = epsilonClosure(nfa, moved);
+            auto [targetId, isNew] = idFor(closure);
+            bool isAccepting = false;
+            for (int s : closure) {
+                if (nfa.acceptStates.count(s)) {
+                    isAccepting = true;
+                    break;
+                }
+            }
+
+            SubsetConstructionStep step;
+            step.sourceId = current;
+            step.sourceNfaStates = sortedStates(sourceNfaStates);
+            step.symbol = symbol;
+            step.moveNfaStates = sortedStates(moved);
+            step.closureNfaStates = sortedStates(closure);
+            step.targetId = targetId;
+            step.isNew = isNew;
+            step.isAccepting = isAccepting;
+            steps.push_back(std::move(step));
+
+            transitions[current][symbol] = {targetId};
+
+            if (!processed.count(targetId)) worklist.push_back(targetId);
+        }
+    }
+
+    std::unordered_set<int> acceptStates;
+    for (size_t dfaId = 0; dfaId < stateSets.size(); ++dfaId) {
+        for (int nfaState : stateSets[dfaId]) {
+            if (nfa.acceptStates.count(nfaState)) {
+                acceptStates.insert(static_cast<int>(dfaId));
+                break;
+            }
+        }
+    }
+
+    Automaton dfa;
+    dfa.stateCount = static_cast<int>(stateSets.size());
+    dfa.startState = startState;
+    dfa.acceptStates = acceptStates;
+    dfa.transitions = transitions;
+
+    SubsetTrace trace;
+    trace.steps = std::move(steps);
+    trace.subsetCount = dfa.stateCount;
+
+    return TracedSubsetConstruction{std::move(dfa), std::move(trace)};
+}
+
 }  // namespace regexlab

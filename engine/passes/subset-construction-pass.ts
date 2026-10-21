@@ -49,6 +49,7 @@
  */
 
 import type { Automaton } from "../types.js";
+import type { SubsetConstructionStep, SubsetTrace } from "../growth-types.js";
 import { decodeCharacterSet, transitionMatches } from "../character-set.js";
 
 function epsilonClosure(nfa: Automaton, states: Iterable<number>): Set<number> {
@@ -178,4 +179,95 @@ export function subsetConstruction(nfa: Automaton): Automaton {
     acceptStates,
     transitions,
   };
+}
+
+/**
+ * SubsetConstructionPass, traced — issue #68 (Subset Growth / NFA
+ * Structure Lab, PR A). Same worklist algorithm as subsetConstruction()
+ * above (reuses the exact same private helpers: epsilonClosure, move,
+ * alphabetOf, setKey), with one addition: every worklist step is
+ * recorded as a SubsetConstructionStep. This is a SEPARATE entry point,
+ * not a parameter added to subsetConstruction() itself, specifically so
+ * the normal pipeline (which calls subsetConstruction() directly) is
+ * byte-for-byte untouched by this feature — trace collection only runs
+ * when this function is explicitly called.
+ */
+export function subsetConstructionTraced(nfa: Automaton): { dfa: Automaton; trace: SubsetTrace } {
+  const alphabet = alphabetOf(nfa);
+
+  const stateSets: Set<number>[] = [];
+  const idBySetKey = new Map<string, number>();
+  const transitions = new Map<number, Map<string, number[]>>();
+  const steps: SubsetConstructionStep[] = [];
+
+  function idFor(nfaStateSet: Set<number>): { id: number; isNew: boolean } {
+    const key = setKey(nfaStateSet);
+    let id = idBySetKey.get(key);
+    if (id === undefined) {
+      id = stateSets.length;
+      idBySetKey.set(key, id);
+      stateSets.push(nfaStateSet);
+      return { id, isNew: true };
+    }
+    return { id, isNew: false };
+  }
+
+  function sortedStates(states: Iterable<number>): number[] {
+    return [...states].sort((a, b) => a - b);
+  }
+
+  const startClosure = epsilonClosure(nfa, [nfa.startState]);
+  const { id: startState } = idFor(startClosure);
+
+  const processed = new Set<number>();
+  const worklist: number[] = [startState];
+
+  while (worklist.length > 0) {
+    const current = worklist.pop()!;
+    if (processed.has(current)) continue;
+    processed.add(current);
+
+    for (const symbol of alphabet) {
+      const sourceNfaStates = stateSets[current];
+      const moved = move(nfa, sourceNfaStates, symbol);
+      if (moved.size === 0) continue;
+
+      const closure = epsilonClosure(nfa, moved);
+      const { id: targetId, isNew } = idFor(closure);
+      const isAccepting = [...closure].some((s) => nfa.acceptStates.has(s));
+
+      steps.push({
+        sourceId: current,
+        sourceNfaStates: sortedStates(sourceNfaStates),
+        symbol,
+        moveNfaStates: sortedStates(moved),
+        closureNfaStates: sortedStates(closure),
+        targetId,
+        isNew,
+        isAccepting,
+      });
+
+      let bySymbol = transitions.get(current);
+      if (!bySymbol) {
+        bySymbol = new Map();
+        transitions.set(current, bySymbol);
+      }
+      bySymbol.set(symbol, [targetId]);
+
+      if (!processed.has(targetId)) worklist.push(targetId);
+    }
+  }
+
+  const acceptStates = new Set<number>();
+  stateSets.forEach((nfaStateSet, dfaId) => {
+    for (const nfaState of nfaStateSet) {
+      if (nfa.acceptStates.has(nfaState)) {
+        acceptStates.add(dfaId);
+        break;
+      }
+    }
+  });
+
+  const dfa: Automaton = { stateCount: stateSets.length, startState, acceptStates, transitions };
+  return { dfa, trace: { steps, subsetCount: stateSets.length } };
 }

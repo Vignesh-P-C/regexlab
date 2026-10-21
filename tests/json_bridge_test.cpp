@@ -165,3 +165,43 @@ TEST_CASE("json_bridge — shorthand AST members serialize in sorted ASCII order
     REQUIRE(j["ast"]["characters"][9] == 57);
     REQUIRE(j["ast"]["characters"][10] == 65);
 }
+
+// issue #68 — Subset Growth / NFA Structure Lab (PR A) JSON boundary.
+
+TEST_CASE("json_bridge — runGrowthAnalysis serializes distinct counts and an honest not-computed bound", "[json_bridge][growth]") {
+    std::string raw = runGrowthAnalysisJson("(a|b)*c");
+    json j = json::parse(raw);
+
+    REQUIRE(j["ok"].get<bool>() == true);
+    const json& a = j["analysis"];
+    REQUIRE(a["subsetTrace"]["subsetCount"].get<int>() == a["reachableSubsetStateCount"].get<int>());
+    REQUIRE(a["minimizedStateCount"].get<int>() <= a["reachableSubsetStateCount"].get<int>());
+    REQUIRE(a["bound"]["status"].get<std::string>() == "not-computed");
+    REQUIRE(a["powersetCeiling"]["exactDecimal"].is_string());
+}
+
+TEST_CASE("json_bridge — runGrowthAnalysis on an invalid pattern returns the ParseError, not a crash", "[json_bridge][growth]") {
+    std::string raw = runGrowthAnalysisJson("(a");
+    json j = json::parse(raw);
+    REQUIRE(j["ok"].get<bool>() == false);
+    REQUIRE(j["error"]["type"].get<std::string>() == "UnmatchedParen");
+}
+
+TEST_CASE("json_bridge — verifyCandidate reports the 'a*' skip-edge deletion as different with an empty-string witness", "[json_bridge][growth]") {
+    // Thompson's star fragment for "a*": the inner 'a' CharNode fragment is
+    // built FIRST (states 0=inner.start, 1=inner.accept), then star's own
+    // wrapper states are allocated (2=start, 3=accept). So the overall NFA
+    // is start=2, accept={3}, and the skip edge ("zero repetitions") is
+    // start(2) --eps--> accept(3) — confirmed against
+    // listEligibleEpsilonEdges() in growth_analysis_test.cpp's equivalent
+    // 'a*' case, which finds this edge via nfa.startState/acceptStates
+    // rather than a hardcoded literal.
+    std::string raw = verifyCandidateJson("a*", 2, 3);
+    json j = json::parse(raw);
+    REQUIRE(j["ok"].get<bool>() == true);
+    const json& eq = j["candidate"]["equivalence"];
+    REQUIRE(eq["status"].get<std::string>() == "different");
+    REQUIRE(eq["witness"]["word"].get<std::string>() == "");
+    REQUIRE(eq["witness"]["baselineAccepts"].get<bool>() == true);
+    REQUIRE(eq["witness"]["candidateAccepts"].get<bool>() == false);
+}

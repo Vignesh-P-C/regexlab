@@ -91,9 +91,16 @@ regexlab/
 │   │   └── matcher-pass.{ts,cpp}             # ✅
 │   ├── pipeline.cpp                          # ✅ wires all 5 C++ passes; returns every stage
 │   ├── json_bridge.cpp                       # ✅ serializes the pipeline snapshot to the JSON wire format
-│   ├── wasm/bindings.cpp                     # ✅ Embind bindings exposing runPipeline() to JS
+│   ├── wasm/bindings.cpp                     # ✅ Embind bindings exposing runPipeline(), runGrowthAnalysis(), verifyCandidate() to JS
+│   ├── growth-types.ts                       # 🆕 #68 PR A: additive contracts for the Subset Growth / NFA Structure Lab
+│   ├── automaton-metrics.{ts,cpp}            # 🆕 #68 PR A: raw/reachable/trim state counts, alphabet size, exact 2^n ceiling
+│   ├── candidate.{ts,cpp}                    # 🆕 #68 PR A: candidate-copy + ε-edge-deletion what-if edits (baseline never mutated)
+│   ├── equivalence.{ts,cpp}                  # 🆕 #68 PR A: the reusable exact-equivalence verifier (product BFS, shortest witness) — PR B's entry point
+│   ├── growth-analysis.{ts,cpp}              # 🆕 #68 PR A: top-level computeGrowthAnalysis() / verifyCandidate() orchestration
 │   ├── include/regexlab/
 │   │   ├── types.hpp                         # ✅ C++ data contracts
+│   │   ├── growth-types.hpp                  # 🆕 #68 PR A: C++ port of growth-types.ts
+│   │   ├── automaton-metrics.hpp / candidate.hpp / equivalence.hpp / growth-analysis.hpp  # 🆕 #68 PR A headers
 │   │   ├── pipeline.hpp
 │   │   ├── json_bridge.hpp                   # JSON wire-format documentation
 │   │   └── passes/*.hpp                      # one header per pass
@@ -104,6 +111,7 @@ regexlab/
 ├── tests/                                    # ✅ C++ Catch2 tests (golden values, pipeline, json bridge, differential)
 │   ├── fixtures/parser-cases.json           # ✅ Shared parser parity cases for TypeScript and C++
 │   ├── parser_cases_fixture_test.cpp        # ✅ C++ half of the shared parser parity fixture
+│   ├── growth_analysis_test.cpp             # 🆕 #68 PR A: mirrors growth-analysis.test.ts case-for-case
 │   ├── smoke_test.cpp
 │   ├── parser_pass_test.cpp
 │   ├── thompson_pass_test.cpp
@@ -118,13 +126,14 @@ regexlab/
 ├── frontend/                                 # ✅ React + Vite, verified end to end against the real WASM build
 │   ├── src/
 │   │   ├── App.tsx
-│   │   ├── hooks/useRegexEngine.ts           # loads the WASM module (Blob-URL import), exposes runPipeline()
-│   │   ├── types/engine.ts                   # mirrors the JSON wire format exactly
+│   │   ├── hooks/useRegexEngine.ts           # loads the WASM module (Blob-URL import), exposes runPipeline(), runGrowthAnalysis(), verifyCandidate()
+│   │   ├── types/engine.ts                   # mirrors the JSON wire format exactly; 🆕 #68 PR A growth/candidate types (additive)
 │   │   ├── lib/
 │   │   │   ├── steps.ts                      # AST and automaton playback traces
-│   │   │   └── transition-label-layout.ts    # estimates label bounds and routes around nodes, labels, and edges
-│   │   │                                      # geometry regressions: transition-label-layout.test.ts
-│   │   └── components/                       # PatternInput, PlaybackControls, AutomatonView; SuggestionBanner stubbed, unwired
+│   │   │   ├── transition-label-layout.ts    # estimates label bounds and routes around nodes, labels, and edges
+│   │   │   │                                  # geometry regressions: transition-label-layout.test.ts
+│   │   │   └── growth.ts                     # 🆕 #68 PR A: lists eligible ε-edges from the JSON Automaton for the what-if panel
+│   │   └── components/                       # PatternInput, PlaybackControls, AutomatonView; GrowthPanel 🆕 #68 PR A; SuggestionBanner stubbed, unwired
 │   └── public/wasm/                          # regexlab.js + regexlab.wasm go here (built locally, not committed)
 ├── api/
 │   └── suggest.ts                            # 📋 only if the AI layer uses an LLM (decision pending, issue #19)

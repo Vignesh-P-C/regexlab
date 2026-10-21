@@ -20,3 +20,42 @@ export type PipelineSnapshot =
   | { ok: true; ast: ASTNode; nfa: Automaton; dfa: Automaton; minDfa: Automaton; trace: MatchTrace }
   | { ok: false; error: ParseError };
 export type Stage = "ast" | "nfa" | "dfa" | "minDfa";
+
+// issue #68 — Subset Growth / NFA Structure Lab (PR A). Additive —
+// mirrors engine/growth-types.ts / growth-types.hpp field for field.
+export type SubsetConstructionStep = {
+  sourceId: number;
+  sourceNfaStates: number[];
+  symbol: string;
+  moveNfaStates: number[];
+  closureNfaStates: number[];
+  targetId: number;
+  isNew: boolean;
+  isAccepting: boolean;
+};
+export type SubsetTrace = { steps: SubsetConstructionStep[]; subsetCount: number };
+export type AutomatonMetrics = {
+  rawStateCount: number; reachableStateCount: number; trimStateCount: number;
+  epsilonEdgeCount: number; consumingEdgeCount: number; totalTransitionCount: number; alphabetSize: number;
+};
+export type PowersetCeiling = { exponent: number; exactDecimal: string };
+export type BoundResult =
+  | { status: "not-computed"; reason: string }
+  | { status: "computed"; representation: string; method: string; value: string };
+export type GrowthAnalysis = {
+  nfaMetrics: AutomatonMetrics;
+  subsetTrace: SubsetTrace;
+  reachableSubsetStateCount: number;
+  minimizedStateCount: number;
+  powersetCeiling: PowersetCeiling;
+  bound: BoundResult;
+};
+export type GrowthAnalysisResult = { ok: true; analysis: GrowthAnalysis } | { ok: false; error: ParseError };
+
+export type EquivalenceWitness = { word: string; isEmpty: boolean; baselineAccepts: boolean; candidateAccepts: boolean };
+export type EquivalenceResult =
+  | { status: "equivalent" }
+  | { status: "different"; witness: EquivalenceWitness }
+  | { status: "inconclusive"; reason: string };
+export type CandidateResult = { nfa: Automaton; metrics: AutomatonMetrics; equivalence: EquivalenceResult };
+export type CandidateResponse = { ok: true; candidate: CandidateResult } | { ok: false; error: ParseError };
