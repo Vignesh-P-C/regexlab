@@ -230,3 +230,18 @@ TEST_CASE("json_bridge — verifyCandidate reports the 'a*' skip-edge deletion a
     REQUIRE(eq["witness"]["baselineAccepts"].get<bool>() == true);
     REQUIRE(eq["witness"]["candidateAccepts"].get<bool>() == false);
 }
+
+
+TEST_CASE("json_bridge -- minimization safety guard serializes its error name", "[json_bridge]") {
+    // 500 literals stay within the parser's pattern-length limit. Their many
+    // distinct alphabet columns make Moore refinement exceed its work budget.
+    const std::string symbols = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&,-/:;<=>@^_";
+    std::string pattern;
+    pattern.reserve(500);
+    for (size_t i = 0; i < 500; ++i) pattern.push_back(symbols[i % symbols.size()]);
+
+    json j = json::parse(runPipelineJson(pattern, ""));
+    REQUIRE_FALSE(j["ok"].get<bool>());
+    REQUIRE(j["error"]["type"].get<std::string>() == "AutomatonTooComplex");
+    REQUIRE(j["error"]["position"].get<int>() == 0);
+}
