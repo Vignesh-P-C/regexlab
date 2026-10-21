@@ -120,6 +120,10 @@ regexlab/
 │   │   ├── App.tsx
 │   │   ├── hooks/useRegexEngine.ts           # loads the WASM module (Blob-URL import), exposes runPipeline()
 │   │   ├── types/engine.ts                   # mirrors the JSON wire format exactly
+│   │   ├── lib/
+│   │   │   ├── steps.ts                      # AST and automaton playback traces
+│   │   │   └── transition-label-layout.ts    # estimates label bounds and routes around nodes, labels, and edges
+│   │   │                                      # geometry regressions: transition-label-layout.test.ts
 │   │   └── components/                       # PatternInput, PlaybackControls, AutomatonView; SuggestionBanner stubbed, unwired
 │   └── public/wasm/                          # regexlab.js + regexlab.wasm go here (built locally, not committed)
 ├── api/
@@ -130,6 +134,10 @@ regexlab/
 ├── CLAUDE.md                                 # project brief and working agreement (paste into every Claude session)
 └── README.md
 ```
+
+### Dense Automaton Label Review Matrix (#61)
+
+The geometry regression tests assert label bounds against state circles, other labels, and unrelated edge paths. When reviewing the rendered SVG, inspect the NFA, DFA, and minimized DFA for the patterns a|b, (a|b)*a, and ([a-c]+|d?)* at a desktop width and a narrow 360px viewport. Check reciprocal arrows, self-loops, epsilon labels, long merged labels, three-or-more outgoing transitions, back edges, and layer-skipping edges. Confirm labels remain readable inside the scrollable SVG and that playback highlighting still follows the arrow associated with each transition.
 
 ### Key Design Decisions
 
