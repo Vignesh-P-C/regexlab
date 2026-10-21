@@ -34,6 +34,62 @@ std::vector<std::string> alphabetOf(const Automaton& dfa) {
     return result;
 }
 
+/**
+ * Alphabet equivalence-class compression (added for issue #64 follow-up).
+ *
+ * refine()'s per-state "signature" loops over every symbol in the alphabet,
+ * so each fixpoint round costs O(n * k) where k = alphabet.size(). Extended
+ * syntax (character classes, `.`, shorthand classes) desugars into one DFA
+ * symbol per matching ASCII code during subset construction, so k can now be
+ * as large as 126 (`.`) instead of the ~1 symbol a plain literal pattern
+ * produced before this grammar existed — and refine() runs up to n times to
+ * reach the fixpoint, so the real cost is O(n^2 * k).
+ *
+ * The fix: two symbols that lead every state to the same destination are
+ * interchangeable as far as refine()'s signature is concerned — including
+ * both in a signature adds the same value twice, which can never cause an
+ * extra split. So before refining, group the alphabet into equivalence
+ * classes where symbols a and b are in the same class iff
+ * transition(s, a) == transition(s, b) for every state s (the "transition
+ * column" for a and b is identical). Only one representative per class is
+ * needed to build a signature that is informationally identical to using
+ * the full alphabet — dropping the duplicates never changes which states
+ * end up in the same bucket, so the final partition (and therefore the
+ * minimized DFA) is unaffected. A `.`-repeated pattern collapses its whole
+ * 126-symbol alphabet into a single class (every symbol sends every state
+ * to the same next state), so refine() becomes O(n^2 * 1) instead of
+ * O(n^2 * 126) for exactly the case that used to be slow.
+ *
+ * Picking the lexicographically-first symbol in each class as its
+ * representative (alphabet is pre-sorted) keeps this deterministic.
+ */
+std::vector<std::string> representativeAlphabetOf(const Automaton& dfa, const std::vector<std::string>& alphabet,
+                                                    int stateCount) {
+    std::unordered_set<std::string> seenKeys;
+    std::vector<std::string> representatives;
+
+    for (const std::string& symbol : alphabet) {
+        std::ostringstream column;
+        for (int state = 0; state < stateCount; ++state) {
+            if (state > 0) column << ",";
+            auto stateIt = dfa.transitions.find(state);
+            bool found = false;
+            if (stateIt != dfa.transitions.end()) {
+                auto symIt = stateIt->second.find(symbol);
+                if (symIt != stateIt->second.end() && !symIt->second.empty()) {
+                    column << symIt->second[0];
+                    found = true;
+                }
+            }
+            if (!found) column << "-";
+        }
+        std::string key = column.str();
+        if (seenKeys.insert(key).second) representatives.push_back(symbol);
+    }
+
+    return representatives;
+}
+
 struct RefineResult {
     std::vector<std::vector<int>> groups;
     bool changed;
@@ -81,10 +137,51 @@ RefineResult refine(const std::vector<std::vector<int>>& groups, const Automaton
     return {newGroups, changed};
 }
 
+/**
+ * refine()'s per-state signature loop runs once per fixpoint round (up to
+ * stateCount rounds), so its real cost is stateCount^2 * alphabetSize —
+ * fine for a handful of symbols, not fine for a `.`-heavy pattern whose
+ * alphabet is however many distinct ASCII codes its character classes
+ * cover (up to 126). Alphabet compression (above) usually drives that
+ * down to ~1 for a single repeated class, but a pattern can still be
+ * constructed where every symbol's transition column really is distinct
+ * (no two symbols ever collapse) — e.g. a long concatenation of distinct
+ * single-character literals, where each literal is "live" at exactly one
+ * unique state and so is never redundant with any other. For that
+ * adversarial shape, compression buys nothing and the cost is still
+ * stateCount^2 * alphabetSize.
+ *
+ * This threshold is a backstop against that shape, not the primary fix —
+ * the primary fix is the compression above. Derivation: the engine's
+ * alphabet is ASCII-only (at most 128 symbols, CLAUDE.md §10), so even the
+ * fully-adversarial case can't push alphabetSize past 128. Measured on the
+ * WASM build pre-compression (Stage 1 of the issue #64 follow-up review):
+ * stateCount=501, alphabetSize=126 (a `.` x500 chain) cost ~6793ms, i.e.
+ * ~4637 (stateCount^2 * alphabetSize) units per millisecond. Capping
+ * worst-case synchronous blocking at ~2s on that same hardware gives
+ * 2000ms * 4637 ~= 9.27M; rounded down for margin. Post-compression, the
+ * same `.` x500 case now costs 500^2 * 1 = 250,000 — 40x under this
+ * threshold — while a 128-symbol, zero-compression, 500-state adversarial
+ * case (500^2 * 128 = 32,000,000) is caught well before it would run.
+ */
+constexpr long long kMaxMinimizationWork = 10'000'000;
+
 }  // namespace
 
 Automaton minimize(const Automaton& dfa) {
     std::vector<std::string> alphabet = alphabetOf(dfa);
+    std::vector<std::string> representatives = representativeAlphabetOf(dfa, alphabet, dfa.stateCount);
+
+    long long work = static_cast<long long>(dfa.stateCount) * dfa.stateCount *
+                      static_cast<long long>(representatives.size());
+    if (work > kMaxMinimizationWork) {
+        throw MinimizationTooComplex(ParseError{
+            ParseErrorType::AutomatonTooComplex, 0,
+            std::string("stateCount^2 * alphabetSize <= ") + std::to_string(kMaxMinimizationWork),
+            std::string("stateCount=") + std::to_string(dfa.stateCount) +
+                ", alphabetSize=" + std::to_string(representatives.size()) +
+                " (stateCount^2 * alphabetSize = " + std::to_string(work) + ")"});
+    }
 
     std::vector<int> allStates(dfa.stateCount);
     for (int i = 0; i < dfa.stateCount; ++i) allStates[i] = i;
@@ -100,10 +197,12 @@ Automaton minimize(const Automaton& dfa) {
     if (!nonAccepting.empty()) groups.push_back(nonAccepting);
     if (!accepting.empty()) groups.push_back(accepting);
 
-    // Fixpoint: keep refining until a full pass produces zero splits.
+    // Fixpoint: keep refining until a full pass produces zero splits. Uses
+    // the compressed representative list, not the full alphabet — see
+    // representativeAlphabetOf's comment for why that's sound.
     bool changed = true;
     while (changed) {
-        RefineResult result = refine(groups, dfa, alphabet);
+        RefineResult result = refine(groups, dfa, representatives);
         groups = result.groups;
         changed = result.changed;
     }

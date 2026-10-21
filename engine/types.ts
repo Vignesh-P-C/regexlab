@@ -8,7 +8,7 @@ export type ASTNode =
   | { kind: "plus"; child: ASTNode }
   | { kind: "optional"; child: ASTNode };
 export type ParseError = {
-  type: "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator" | "PatternTooComplex" | "InvalidCharacterClass";
+  type: "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator" | "PatternTooComplex" | "InvalidCharacterClass" | "AutomatonTooComplex";
   position: number; expected?: string; found?: string;
 };
 export type ParseResult = { ok: true; ast: ASTNode } | { ok: false; error: ParseError };

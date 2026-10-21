@@ -36,6 +36,7 @@ std::string typeName(ParseErrorType t) {
         case ParseErrorType::DanglingOperator:  return "DanglingOperator";
         case ParseErrorType::PatternTooComplex: return "PatternTooComplex";
         case ParseErrorType::InvalidCharacterClass: return "InvalidCharacterClass";
+        case ParseErrorType::AutomatonTooComplex: return "AutomatonTooComplex";
     }
     return "<unknown>";
 }

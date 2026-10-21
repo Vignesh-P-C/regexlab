@@ -7,8 +7,8 @@ namespace regexlab {
 namespace {
 using json = nlohmann::json;
 json toJson(const ParseError& e) {
-    static const char* names[] = {"UnmatchedParen","UnexpectedToken","EmptyGroup","DanglingOperator","PatternTooComplex","InvalidCharacterClass"};
-    static_assert(sizeof(names)/sizeof(names[0]) == static_cast<size_t>(ParseErrorType::InvalidCharacterClass)+1, "error names must match ParseErrorType");
+    static const char* names[] = {"UnmatchedParen","UnexpectedToken","EmptyGroup","DanglingOperator","PatternTooComplex","InvalidCharacterClass","AutomatonTooComplex"};
+    static_assert(sizeof(names)/sizeof(names[0]) == static_cast<size_t>(ParseErrorType::AutomatonTooComplex)+1, "error names must match ParseErrorType");
     return json{{"type",names[static_cast<int>(e.type)]},{"position",e.position},
         {"expected",e.expected ? json(*e.expected) : json(nullptr)},{"found",e.found ? json(*e.found) : json(nullptr)}};
 }

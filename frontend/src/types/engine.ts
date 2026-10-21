@@ -14,7 +14,7 @@ export type Automaton = {
 };
 export type MatchStep = { ch: string; activeStates: number[] };
 export type MatchTrace = { steps: MatchStep[]; result: "match" | "no-match"; failurePosition: number | null };
-export type ParseErrorType = "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator" | "PatternTooComplex" | "InvalidCharacterClass";
+export type ParseErrorType = "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator" | "PatternTooComplex" | "InvalidCharacterClass" | "AutomatonTooComplex";
 export type ParseError = { type: ParseErrorType; position: number; expected: string | null; found: string | null };
 export type PipelineSnapshot =
   | { ok: true; ast: ASTNode; nfa: Automaton; dfa: Automaton; minDfa: Automaton; trace: MatchTrace }
