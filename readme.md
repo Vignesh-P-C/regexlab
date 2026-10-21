@@ -71,7 +71,7 @@ RegexLab is a compiler-design semester project: take a regex pattern as a raw st
 | `MatcherPass` | DFA-driven matching | `Min-DFA`, `string` → `MatchTrace` | ✅ 8 tests | ✅ Ported, all golden values match |
 | `pipeline` | Chains all 5 passes into one call | `string`, `string` → snapshot of every stage \| `ParseError` | — (TS chains passes directly in tests) | ✅ Complete — a test proves output is identical to manually chaining all 5 passes |
 
-Verification counts are refreshed after the issue #60 test suite is complete. The native C++ build uses the configured warning flags; TypeScript checks and tests run from the repository root.
+All C++ tests pass under the configured warning flags (run `./engine_tests` for the current case and assertion counts — 4,738 assertions / 51 cases, measured on the `pr64-followups` branch after the issue #64 alphabet-compression follow-up). The TS side has 161 tests across 11 files: 128 tests across 8 files on the engine side (33 parser, 5 Thompson, 5 subset construction, 4 minimization, 8 matcher, 12 extended-grammar golden tests, the 59-case shared parser-parity fixture, and a 2-test differential suite), plus 33 frontend tests across 3 files (5 playback-index tests, a 23-test step-playback differential suite, and 5 `PlaybackControls` component tests). TypeScript checks and tests run from the repository root.
 
 Each pass has one job, one input type, and one output type, and is unit-testable without the rest of the pipeline. Passes are plain functions chained by the pipeline (a `Pass<In, Out>` interface was sketched in the original design but is not used). The same `Automaton` shape covers the NFA, DFA and min-DFA stages.
 
@@ -322,8 +322,8 @@ npm run dev       # needs regexlab.js / regexlab.wasm in frontend/public/wasm/
 |---|---|---|
 | **Core (must-ship)** | Grammar v1 (ASCII literals/sets, concat, alternation, star/plus/optional, dot, groups), pass pipeline (TS + C++), tests, WASM and visualizer | 🔄 Issue #60 extends the grammar; contract freeze, AI layer, CI/deployment and report remain |
 | **Remaining optional syllabus item** | AST simplifier (#45); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope | 🤔 #45 remains open and undecided. If taken forward and its simplified-AST output adds JSON fields, settle that before contract freeze (#16) |
-| **Stretch A** | Plus and optional quantifiers | ✅ Included in grammar v1 on the issue #60 branch |
-| **Stretch B** | ASCII character classes, ranges, negation, dot and shorthands | ✅ Included in grammar v1 on the issue #60 branch |
+| **Stretch A** | Plus and optional quantifiers | 🔄 Implemented, checkpoint pending — grammar v1 on the issue #60 branch; both teammates' explain-it-back (§0.1 rule 4) and the Progress Tracker (§15) entry are still owed |
+| **Stretch B** | ASCII character classes, ranges, negation, dot and shorthands | 🔄 Implemented, checkpoint pending — grammar v1 on the issue #60 branch; both teammates' explain-it-back (§0.1 rule 4) and the Progress Tracker (§15) entry are still owed |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | 🔒 Gated — only after Core is finished *and* both teammates can explain differential testing and Moore's minimization without notes |
 | **Explicitly out of scope for grammar v1** | Backreferences, lookaround, bounded repetition and zero-width anchors | Deliberately excluded; see [grammar v1](docs/regex-grammar-v1.md) |
 
