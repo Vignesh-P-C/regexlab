@@ -7,11 +7,10 @@
  * the baseline NFA that drives ordinary compile/match/playback is never
  * touched, no matter how many candidates get built from it.
  *
- * v1 supports exactly one edit kind — deleting an epsilon edge — per the
- * MD's "keep the edit family narrow and explainable" guidance (§5.1).
- * PR B's bounded search will call listEligibleEpsilonEdges() and
- * applyCandidateEdit() the same way a single what-if edit does here;
- * neither function assumes it's only ever called once.
+ * A candidate can delete one or several epsilon edges in one edit. All
+ * selected removals are applied together to a clone before the exact
+ * equivalence check; this matters because safe individual deletions can
+ * be unsafe in combination.
  */
 
 import type { Automaton } from "./types.js";
@@ -60,20 +59,20 @@ export function listEligibleEpsilonEdges(nfa: Automaton): CandidateEdgeId[] {
  */
 export function applyCandidateEdit(nfa: Automaton, edit: CandidateEdit): Automaton {
   const candidate = cloneAutomaton(nfa);
-  if (edit.kind === "deleteEpsilonEdge") {
-    const bySymbol = candidate.transitions.get(edit.edge.source);
+  const edges = edit.kind === "deleteEpsilonEdge" ? [edit.edge] : edit.edges;
+
+  for (const edge of edges) {
+    const bySymbol = candidate.transitions.get(edge.source);
     const targets = bySymbol?.get("eps");
-    if (bySymbol && targets) {
-      const index = targets.indexOf(edit.edge.target);
-      if (index !== -1) {
-        const remaining = targets.slice(0, index).concat(targets.slice(index + 1));
-        if (remaining.length > 0) {
-          bySymbol.set("eps", remaining);
-        } else {
-          bySymbol.delete("eps");
-        }
-      }
-    }
+    if (!bySymbol || !targets) continue;
+
+    const index = targets.indexOf(edge.target);
+    if (index === -1) continue;
+
+    const remaining = targets.slice(0, index).concat(targets.slice(index + 1));
+    if (remaining.length > 0) bySymbol.set("eps", remaining);
+    else bySymbol.delete("eps");
   }
+
   return candidate;
 }

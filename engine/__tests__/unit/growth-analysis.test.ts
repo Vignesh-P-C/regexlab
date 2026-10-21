@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "../../passes/parser-pass.js";
 import { thompsonConstruction } from "../../passes/thompson-pass.js";
-import { subsetConstruction, subsetConstructionTraced } from "../../passes/subset-construction-pass.js";
+import {
+  subsetConstruction,
+  subsetConstructionBounded,
+  subsetConstructionTraced,
+} from "../../passes/subset-construction-pass.js";
 import type { ASTNode, Automaton } from "../../types.js";
 import { computeAutomatonMetrics, computePowersetCeiling } from "../../automaton-metrics.js";
 import { cloneAutomaton, listEligibleEpsilonEdges, applyCandidateEdit } from "../../candidate.js";
@@ -30,7 +34,17 @@ describe("subsetConstructionTraced — invariants (#68)", () => {
     // First step must start from the DFA's actual start state.
     expect(trace.steps[0].sourceId).toBe(dfa.startState);
 
+    const subsetsById = new Map<number, number[]>([
+      [trace.steps[0].sourceId, trace.steps[0].sourceNfaStates],
+    ]);
     for (const step of trace.steps) {
+      expect(step.sourceNfaStates).toEqual(subsetsById.get(step.sourceId));
+      const knownTargetSubset = subsetsById.get(step.targetId);
+      if (knownTargetSubset) {
+        expect(step.closureNfaStates).toEqual(knownTargetSubset);
+      } else {
+        subsetsById.set(step.targetId, step.closureNfaStates);
+      }
       expect(step.closureNfaStates).toEqual([...step.closureNfaStates].sort((a, b) => a - b));
       expect(step.targetId).toBeGreaterThanOrEqual(0);
       // Accepting iff the closure intersects the NFA's own accept states.
@@ -49,6 +63,28 @@ describe("subsetConstructionTraced — invariants (#68)", () => {
     // worklist only ever visits ids it assigned), and the state count the UI
     // would show equals the actual DFA's state count.
     expect(new Set(trace.steps.map((s) => s.targetId)).size).toBeLessThanOrEqual(dfa.stateCount);
+  });
+});
+
+describe("bounded subset construction (#68)", () => {
+  it("returns no partial DFA when its work-unit cap is exhausted", () => {
+    const result = subsetConstructionBounded(nfaFor("a|b"), {
+      maxDfaStates: 100,
+      maxWorkUnits: 0,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("work-unit limit");
+  });
+
+  it("stops when the reachable-subset state cap is exceeded", () => {
+    const result = subsetConstructionBounded(nfaFor("a|b"), {
+      maxDfaStates: 1,
+      maxWorkUnits: 1_000_000,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("DFA-state limit");
   });
 });
 
@@ -111,6 +147,20 @@ describe("exact equivalence verifier — the two worked examples (#68)", () => {
     expect(result.equivalence).toEqual({ status: "equivalent" });
   });
 
+  it("'a|a': deleting both individually-redundant branch edges together is unsafe, with witness 'a'", () => {
+    const nfa = nfaFor("a|a");
+    const edges = listEligibleEpsilonEdges(nfa).filter((e) => e.source === nfa.startState);
+    expect(edges).toHaveLength(2);
+
+    const result = verifyCandidate(nfa, { kind: "deleteEpsilonEdges", edges });
+    expect(result.equivalence.status).toBe("different");
+    if (result.equivalence.status === "different") {
+      expect(result.equivalence.witness.word).toBe("a");
+      expect(result.equivalence.witness.baselineAccepts).toBe(true);
+      expect(result.equivalence.witness.candidateAccepts).toBe(false);
+    }
+  });
+
   it("'a*': deleting the star's skip edge (zero-repetitions path) is UNSAFE, with shortest witness = the empty string", () => {
     const nfa = nfaFor("a*");
     // Thompson's star fragment: start --eps--> inner.start (enter),
@@ -131,6 +181,17 @@ describe("exact equivalence verifier — the two worked examples (#68)", () => {
       expect(result.equivalence.witness.baselineAccepts).toBe(true);
       expect(result.equivalence.witness.candidateAccepts).toBe(false);
     }
+  });
+
+  it("returns inconclusive if determinization hits its cap before product search begins", () => {
+    const nfa = nfaFor("a|b");
+    const result = checkEquivalence(nfa, nfa, 20_000, {
+      maxDfaStates: 1,
+      maxWorkUnits: 1_000_000,
+    });
+
+    expect(result.status).toBe("inconclusive");
+    if (result.status === "inconclusive") expect(result.reason).toContain("DFA-state limit");
   });
 
   it("returns 'inconclusive', never a guess, when the budget is exhausted before the search completes", () => {

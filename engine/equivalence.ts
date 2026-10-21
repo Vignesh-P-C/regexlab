@@ -15,18 +15,20 @@
  * distinguishing input string. If the search exhausts every reachable
  * pair without finding one, the languages are exactly equal.
  *
- * This is exact whenever it completes — but DFA state counts can still
- * blow up (CLAUDE.md §10's O(2^m) line already names this for a single
- * subset construction; a product of two adds another multiplicative
- * factor). A hard, finite, injectable visited-pair budget is therefore
- * mandatory: exceeding it returns `inconclusive`, never a guessed
- * `equivalent`/`different` (MD §5.3, point 8 — "do not reinterpret a
- * timeout as inequivalence or equivalence").
+ * This is exact whenever it completes. Both subset construction and
+ * product traversal have hard, finite, injectable budgets; exceeding any
+ * limit returns inconclusive rather than a guessed equivalent/different
+ * result (MD §5.3, point 8 — do not reinterpret a resource limit as a
+ * language inequivalence or equivalence).
  */
 
 import type { Automaton } from "./types.js";
 import type { EquivalenceResult } from "./growth-types.js";
-import { subsetConstruction } from "./passes/subset-construction-pass.js";
+import {
+  DEFAULT_SUBSET_CONSTRUCTION_LIMITS,
+  subsetConstructionBounded,
+  type SubsetConstructionLimits,
+} from "./passes/subset-construction-pass.js";
 
 /** Default cap on visited product-state pairs before giving up as inconclusive.
  *  Chosen as a round number comfortably above what any pattern within the
@@ -84,9 +86,20 @@ export function checkEquivalence(
   baselineNfa: Automaton,
   candidateNfa: Automaton,
   budget: number = DEFAULT_EQUIVALENCE_BUDGET,
+  subsetLimits: SubsetConstructionLimits = DEFAULT_SUBSET_CONSTRUCTION_LIMITS,
 ): EquivalenceResult {
-  const baselineDfa = subsetConstruction(baselineNfa);
-  const candidateDfa = subsetConstruction(candidateNfa);
+  const baselineResult = subsetConstructionBounded(baselineNfa, subsetLimits);
+  if (!baselineResult.ok) {
+    return { status: "inconclusive", reason: "Baseline " + baselineResult.reason + "." };
+  }
+
+  const candidateResult = subsetConstructionBounded(candidateNfa, subsetLimits);
+  if (!candidateResult.ok) {
+    return { status: "inconclusive", reason: "Candidate " + candidateResult.reason + "." };
+  }
+
+  const baselineDfa = baselineResult.dfa;
+  const candidateDfa = candidateResult.dfa;
 
   const unionAlphabet = [...new Set([...alphabetOfDfa(baselineDfa), ...alphabetOfDfa(candidateDfa)])].sort();
 

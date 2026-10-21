@@ -8,6 +8,7 @@ type RegexLabModule = {
   // for why these must never run on every keystroke the way runPipeline does.
   runGrowthAnalysis: (pattern: string) => string;
   verifyCandidate: (pattern: string, edgeSource: number, edgeTarget: number) => string;
+  verifyCandidateEdges: (pattern: string, edgesJson: string) => string;
 };
 
 type RegexLabModuleFactory = (opts?: {
@@ -97,5 +98,10 @@ export function useRegexEngine() {
     return JSON.parse(moduleRef.current.verifyCandidate(pattern, edgeSource, edgeTarget)) as CandidateResponse;
   }
 
-  return { state, runPipeline, runGrowthAnalysis, verifyCandidate };
+  function verifyCandidateEdges(pattern: string, edgesJson: string): CandidateResponse | null {
+    if (!moduleRef.current) return null;
+    return JSON.parse(moduleRef.current.verifyCandidateEdges(pattern, edgesJson)) as CandidateResponse;
+  }
+
+  return { state, runPipeline, runGrowthAnalysis, verifyCandidate, verifyCandidateEdges };
 }

@@ -14,7 +14,7 @@ export type Automaton = {
 };
 export type MatchStep = { ch: string; activeStates: number[] };
 export type MatchTrace = { steps: MatchStep[]; result: "match" | "no-match"; failurePosition: number | null };
-export type ParseErrorType = "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator" | "PatternTooComplex" | "InvalidCharacterClass" | "AutomatonTooComplex";
+export type ParseErrorType = "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator" | "PatternTooComplex" | "InvalidCharacterClass";
 export type ParseError = { type: ParseErrorType; position: number; expected: string | null; found: string | null };
 export type PipelineSnapshot =
   | { ok: true; ast: ASTNode; nfa: Automaton; dfa: Automaton; minDfa: Automaton; trace: MatchTrace }
@@ -57,5 +57,10 @@ export type EquivalenceResult =
   | { status: "equivalent" }
   | { status: "different"; witness: EquivalenceWitness }
   | { status: "inconclusive"; reason: string };
+// Candidate edges come from the epsilon-only selector, so the symbol is implicit at this UI boundary.
+export type CandidateEdgeId = { source: number; target: number };
+export type CandidateEditError = { type: "InvalidCandidateEdit"; message: string };
 export type CandidateResult = { nfa: Automaton; metrics: AutomatonMetrics; equivalence: EquivalenceResult };
-export type CandidateResponse = { ok: true; candidate: CandidateResult } | { ok: false; error: ParseError };
+export type CandidateResponse =
+  | { ok: true; candidate: CandidateResult }
+  | { ok: false; error: ParseError | CandidateEditError };

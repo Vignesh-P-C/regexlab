@@ -24,8 +24,21 @@ namespace regexlab {
 
 namespace {
 
+struct WorkBudget {
+    std::size_t remaining;
+};
+
+struct BudgetExceeded {};
+
+void accountWork(WorkBudget* budget, std::size_t amount = 1) {
+    if (!budget) return;
+    if (amount > budget->remaining) throw BudgetExceeded{};
+    budget->remaining -= amount;
+}
+
 std::unordered_set<int> epsilonClosure(const Automaton& nfa,
-                                        const std::unordered_set<int>& states) {
+                                        const std::unordered_set<int>& states,
+                                        WorkBudget* budget = nullptr) {
     std::unordered_set<int> closure(states);
     std::vector<int> stack(closure.begin(), closure.end());
 
@@ -39,6 +52,7 @@ std::unordered_set<int> epsilonClosure(const Automaton& nfa,
         if (epsIt == stateIt->second.end()) continue;
 
         for (int target : epsIt->second) {
+            accountWork(budget);
             if (closure.insert(target).second) {  // .second == true iff newly inserted
                 stack.push_back(target);
             }
@@ -56,12 +70,14 @@ std::unordered_set<int> epsilonClosure(const Automaton& nfa,
  * tells the two apart.
  */
 std::unordered_set<int> move(const Automaton& nfa, const std::unordered_set<int>& states,
-                              const std::string& symbol) {
+                              const std::string& symbol, WorkBudget* budget = nullptr) {
     std::unordered_set<int> result;
     for (int state : states) {
+        accountWork(budget);
         auto stateIt = nfa.transitions.find(state);
         if (stateIt == nfa.transitions.end()) continue;
         for (const auto& [label, targets] : stateIt->second) {
+            accountWork(budget);
             if (transitionMatches(label, symbol[0])) {
                 for (int target : targets) result.insert(target);
             }
@@ -76,13 +92,15 @@ std::unordered_set<int> move(const Automaton& nfa, const std::unordered_set<int>
  * arrived compacted as a "cs:" set. See this file's header comment for
  * why that expansion happens here and what it costs downstream.
  */
-std::vector<std::string> alphabetOf(const Automaton& nfa) {
+std::vector<std::string> alphabetOf(const Automaton& nfa, WorkBudget* budget = nullptr) {
     std::unordered_set<std::string> symbols;
     for (const auto& [state, bySymbol] : nfa.transitions) {
         for (const auto& [label, targets] : bySymbol) {
+            accountWork(budget);
             if (label == "eps") continue;
             if (isCharacterSetLabel(label)) {
                 for (int code : decodeCharacterSet(label)) {
+                    accountWork(budget);
                     symbols.insert(std::string(1, static_cast<char>(code)));
                 }
             } else if (label.size() == 1) {
@@ -96,7 +114,8 @@ std::vector<std::string> alphabetOf(const Automaton& nfa) {
 }
 
 /** Canonical, order-independent key for a set of NFA states, used to dedupe DFA states. */
-std::string setKey(const std::unordered_set<int>& states) {
+std::string setKey(const std::unordered_set<int>& states, WorkBudget* budget = nullptr) {
+    accountWork(budget, states.size());
     std::vector<int> sorted(states.begin(), states.end());
     std::sort(sorted.begin(), sorted.end());
     std::ostringstream oss;
@@ -109,24 +128,27 @@ std::string setKey(const std::unordered_set<int>& states) {
 
 }  // namespace
 
-Automaton subsetConstruction(const Automaton& nfa) {
-    std::vector<std::string> alphabet = alphabetOf(nfa);
+namespace {
+Automaton subsetConstructionImpl(const Automaton& nfa, WorkBudget* budget,
+                                 std::size_t maxDfaStates) {
+    std::vector<std::string> alphabet = alphabetOf(nfa, budget);
 
     std::vector<std::unordered_set<int>> stateSets;  // DFA state id -> the NFA-state-set it represents
     std::unordered_map<std::string, int> idBySetKey;
     std::unordered_map<int, std::unordered_map<std::string, std::vector<int>>> transitions;
 
     auto idFor = [&](const std::unordered_set<int>& nfaStateSet) -> int {
-        std::string key = setKey(nfaStateSet);
+        std::string key = setKey(nfaStateSet, budget);
         auto it = idBySetKey.find(key);
         if (it != idBySetKey.end()) return it->second;
+        if (budget && stateSets.size() >= maxDfaStates) throw BudgetExceeded{};
         int id = static_cast<int>(stateSets.size());
         idBySetKey[key] = id;
         stateSets.push_back(nfaStateSet);
         return id;
     };
 
-    int startState = idFor(epsilonClosure(nfa, {nfa.startState}));
+    int startState = idFor(epsilonClosure(nfa, {nfa.startState}, budget));
 
     // Worklist/fixpoint: process every DFA state exactly once, even though
     // new states can be discovered mid-loop (stateSets grows as we go).
@@ -140,10 +162,11 @@ Automaton subsetConstruction(const Automaton& nfa) {
         processed.insert(current);
 
         for (const std::string& symbol : alphabet) {
-            std::unordered_set<int> moved = move(nfa, stateSets[current], symbol);
+            accountWork(budget);
+            std::unordered_set<int> moved = move(nfa, stateSets[current], symbol, budget);
             if (moved.empty()) continue;  // no transition on this symbol -> implicit dead state, omitted
 
-            int targetId = idFor(epsilonClosure(nfa, moved));
+            int targetId = idFor(epsilonClosure(nfa, moved, budget));
 
             transitions[current][symbol] = {targetId};  // deterministic: exactly one destination per symbol
 
@@ -153,6 +176,7 @@ Automaton subsetConstruction(const Automaton& nfa) {
 
     std::unordered_set<int> acceptStates;
     for (size_t dfaId = 0; dfaId < stateSets.size(); ++dfaId) {
+        accountWork(budget, stateSets[dfaId].size());
         for (int nfaState : stateSets[dfaId]) {
             if (nfa.acceptStates.count(nfaState)) {
                 acceptStates.insert(static_cast<int>(dfaId));
@@ -167,6 +191,22 @@ Automaton subsetConstruction(const Automaton& nfa) {
     dfa.acceptStates = acceptStates;
     dfa.transitions = transitions;
     return dfa;
+}
+}  // namespace
+
+Automaton subsetConstruction(const Automaton& nfa) {
+    return subsetConstructionImpl(nfa, nullptr, 0);
+}
+
+std::optional<Automaton> subsetConstructionBounded(
+    const Automaton& nfa, const SubsetConstructionLimits& limits) {
+    if (limits.maxDfaStates == 0) return std::nullopt;
+    WorkBudget budget{limits.maxWorkUnits};
+    try {
+        return subsetConstructionImpl(nfa, &budget, limits.maxDfaStates);
+    } catch (const BudgetExceeded&) {
+        return std::nullopt;
+    }
 }
 
 namespace {
@@ -207,7 +247,7 @@ TracedSubsetConstruction subsetConstructionTraced(const Automaton& nfa) {
         processed.insert(current);
 
         for (const std::string& symbol : alphabet) {
-            const std::unordered_set<int>& sourceNfaStates = stateSets[current];
+            const std::unordered_set<int> sourceNfaStates = stateSets[current];
             std::unordered_set<int> moved = move(nfa, sourceNfaStates, symbol);
             if (moved.empty()) continue;
 

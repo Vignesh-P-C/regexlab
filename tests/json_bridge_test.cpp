@@ -187,6 +187,31 @@ TEST_CASE("json_bridge — runGrowthAnalysis on an invalid pattern returns the P
     REQUIRE(j["error"]["type"].get<std::string>() == "UnmatchedParen");
 }
 
+TEST_CASE("json_bridge — verifies multiple selected epsilon deletions as one candidate", "[json_bridge][growth]") {
+    const std::string raw = verifyCandidateEdgesJson(
+        "a|a", R"([{"source":4,"target":0},{"source":4,"target":2}])");
+    const json j = json::parse(raw);
+
+    REQUIRE(j["ok"].get<bool>());
+    const json& eq = j["candidate"]["equivalence"];
+    REQUIRE(eq["status"] == "different");
+    REQUIRE(eq["witness"]["word"] == "a");
+    REQUIRE(eq["witness"]["baselineAccepts"] == true);
+    REQUIRE(eq["witness"]["candidateAccepts"] == false);
+}
+
+TEST_CASE("json_bridge — rejects duplicate or nonexistent selected epsilon edges", "[json_bridge][growth]") {
+    const json duplicate = json::parse(verifyCandidateEdgesJson(
+        "a|a", R"([{"source":4,"target":0},{"source":4,"target":0}])"));
+    REQUIRE_FALSE(duplicate["ok"].get<bool>());
+    REQUIRE(duplicate["error"]["type"] == "InvalidCandidateEdit");
+
+    const json missing = json::parse(verifyCandidateEdgesJson(
+        "a|a", R"([{"source":4,"target":99}])"));
+    REQUIRE_FALSE(missing["ok"].get<bool>());
+    REQUIRE(missing["error"]["type"] == "InvalidCandidateEdit");
+}
+
 TEST_CASE("json_bridge — verifyCandidate reports the 'a*' skip-edge deletion as different with an empty-string witness", "[json_bridge][growth]") {
     // Thompson's star fragment for "a*": the inner 'a' CharNode fragment is
     // built FIRST (states 0=inner.start, 1=inner.accept), then star's own

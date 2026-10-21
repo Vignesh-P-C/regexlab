@@ -29,4 +29,5 @@ EMSCRIPTEN_BINDINGS(regexlab_module) {
     // keystroke. See json_bridge.hpp for the exact JSON shapes.
     emscripten::function("runGrowthAnalysis", &regexlab::runGrowthAnalysisJson);
     emscripten::function("verifyCandidate", &regexlab::verifyCandidateJson);
+    emscripten::function("verifyCandidateEdges", &regexlab::verifyCandidateEdgesJson);
 }

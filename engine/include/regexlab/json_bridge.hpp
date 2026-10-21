@@ -63,4 +63,12 @@ std::string runGrowthAnalysisJson(const std::string& pattern);
  */
 std::string verifyCandidateJson(const std::string& pattern, int edgeSource, int edgeTarget);
 
+/**
+ * Verifies a set of epsilon-edge deletions applied together to one candidate
+ * copy. edgesJson is an array of {source, target} objects selected from the
+ * baseline NFA. Returns an InvalidCandidateEdit error for malformed,
+ * duplicate, or non-existent edges.
+ */
+std::string verifyCandidateEdgesJson(const std::string& pattern, const std::string& edgesJson);
+
 }  // namespace regexlab

@@ -33,19 +33,23 @@ std::vector<CandidateEdgeId> listEligibleEpsilonEdges(const Automaton& nfa) {
 
 Automaton applyCandidateEdit(const Automaton& nfa, const CandidateEdit& edit) {
     Automaton candidate = cloneAutomaton(nfa);
-    if (edit.kind == CandidateEditKind::DeleteEpsilonEdge) {
-        auto stateIt = candidate.transitions.find(edit.edge.source);
-        if (stateIt != candidate.transitions.end()) {
-            auto epsIt = stateIt->second.find("eps");
-            if (epsIt != stateIt->second.end()) {
-                auto& targets = epsIt->second;
-                auto pos = std::find(targets.begin(), targets.end(), edit.edge.target);
-                if (pos != targets.end()) {
-                    targets.erase(pos);
-                    if (targets.empty()) stateIt->second.erase(epsIt);
-                }
-            }
-        }
+    const std::vector<CandidateEdgeId> edges =
+        edit.kind == CandidateEditKind::DeleteEpsilonEdge
+            ? std::vector<CandidateEdgeId>{edit.edge}
+            : edit.edges;
+
+    for (const CandidateEdgeId& edge : edges) {
+        auto stateIt = candidate.transitions.find(edge.source);
+        if (stateIt == candidate.transitions.end()) continue;
+        auto epsIt = stateIt->second.find("eps");
+        if (epsIt == stateIt->second.end()) continue;
+
+        auto& targets = epsIt->second;
+        auto pos = std::find(targets.begin(), targets.end(), edge.target);
+        if (pos == targets.end()) continue;
+
+        targets.erase(pos);
+        if (targets.empty()) stateIt->second.erase(epsIt);
     }
     return candidate;
 }

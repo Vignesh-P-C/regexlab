@@ -37,7 +37,18 @@ TEST_CASE("subsetConstructionTraced — every step is epsilonClosure(move(source
     REQUIRE(traced.trace.subsetCount == traced.dfa.stateCount);
     REQUIRE(traced.trace.steps.front().sourceId == traced.dfa.startState);
 
+    std::unordered_map<int, std::vector<int>> subsetsById;
+    subsetsById[traced.trace.steps.front().sourceId] =
+        traced.trace.steps.front().sourceNfaStates;
     for (const auto& step : traced.trace.steps) {
+        REQUIRE(step.sourceNfaStates == subsetsById.at(step.sourceId));
+        auto knownTargetSubset = subsetsById.find(step.targetId);
+        if (knownTargetSubset != subsetsById.end()) {
+            REQUIRE(step.closureNfaStates == knownTargetSubset->second);
+        } else {
+            subsetsById[step.targetId] = step.closureNfaStates;
+        }
+
         bool shouldAccept = false;
         for (int s : step.closureNfaStates) {
             if (nfa.acceptStates.count(s)) { shouldAccept = true; break; }
@@ -50,6 +61,18 @@ TEST_CASE("subsetConstructionTraced — every step is epsilonClosure(move(source
         if (step.isNew) newCounts[step.targetId]++;
     }
     for (const auto& [id, count] : newCounts) REQUIRE(count == 1);
+}
+
+TEST_CASE("bounded subset construction stops at state and work limits without returning a partial DFA", "[growth]") {
+    Automaton nfa = nfaFor("a|b");
+
+    std::optional<Automaton> workLimited =
+        subsetConstructionBounded(nfa, SubsetConstructionLimits{100, 0});
+    REQUIRE_FALSE(workLimited.has_value());
+
+    std::optional<Automaton> stateLimited =
+        subsetConstructionBounded(nfa, SubsetConstructionLimits{1, 1000000});
+    REQUIRE_FALSE(stateLimited.has_value());
 }
 
 TEST_CASE("AutomatonMetrics — a charset edge is ONE consuming relation", "[growth]") {
@@ -109,6 +132,24 @@ TEST_CASE("'a|a' — deleting one redundant alternation-branch entry edge is SAF
     REQUIRE(result.equivalence.status == EquivalenceStatus::Equivalent);
 }
 
+TEST_CASE("'a|a' — deleting both duplicate branch-entry edges together is UNSAFE", "[growth]") {
+    Automaton nfa = nfaFor("a|a");
+    std::vector<CandidateEdgeId> edges;
+    for (const auto& edge : listEligibleEpsilonEdges(nfa)) {
+        if (edge.source == nfa.startState) edges.push_back(edge);
+    }
+    REQUIRE(edges.size() == 2);
+
+    CandidateEdit edit;
+    edit.kind = CandidateEditKind::DeleteEpsilonEdges;
+    edit.edges = edges;
+    CandidateResult result = verifyCandidate(nfa, edit);
+    REQUIRE(result.equivalence.status == EquivalenceStatus::Different);
+    REQUIRE(result.equivalence.witness.word == "a");
+    REQUIRE(result.equivalence.witness.baselineAccepts);
+    REQUIRE_FALSE(result.equivalence.witness.candidateAccepts);
+}
+
 TEST_CASE("'a*' — deleting the star's skip edge is UNSAFE, shortest witness is the empty string", "[growth]") {
     Automaton nfa = nfaFor("a*");
     std::vector<CandidateEdgeId> edges = listEligibleEpsilonEdges(nfa);
@@ -127,6 +168,14 @@ TEST_CASE("'a*' — deleting the star's skip edge is UNSAFE, shortest witness is
     REQUIRE(result.equivalence.witness.isEmpty);
     REQUIRE(result.equivalence.witness.baselineAccepts);
     REQUIRE_FALSE(result.equivalence.witness.candidateAccepts);
+}
+
+TEST_CASE("Equivalence — determinization limit returns inconclusive before product search", "[growth]") {
+    Automaton nfa = nfaFor("a|b");
+    EquivalenceResult result = checkEquivalence(
+        nfa, nfa, kDefaultEquivalenceBudget, SubsetConstructionLimits{1, 1000000});
+    REQUIRE(result.status == EquivalenceStatus::Inconclusive);
+    REQUIRE(result.reason.find("DFA-state limit") != std::string::npos);
 }
 
 TEST_CASE("Equivalence — a budget of zero returns inconclusive, never a guess", "[growth]") {

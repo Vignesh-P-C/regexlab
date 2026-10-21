@@ -77,7 +77,9 @@ export type GrowthAnalysis = {
  */
 export type CandidateEdgeId = { source: number; symbol: "eps"; target: number };
 
-export type CandidateEdit = { kind: "deleteEpsilonEdge"; edge: CandidateEdgeId };
+export type CandidateEdit =
+  | { kind: "deleteEpsilonEdge"; edge: CandidateEdgeId }
+  | { kind: "deleteEpsilonEdges"; edges: CandidateEdgeId[] };
 
 export type EquivalenceWitness = {
   /** The actual input string; "" means the empty string (display as "ε" in the UI, not the literal word "epsilon"). */

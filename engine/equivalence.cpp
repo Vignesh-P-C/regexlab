@@ -10,6 +10,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "regexlab/passes/subset-construction-pass.hpp"
 
@@ -52,9 +53,26 @@ std::string pairKey(int b, int c) { return std::to_string(b) + "," + std::to_str
 
 }  // namespace
 
-EquivalenceResult checkEquivalence(const Automaton& baselineNfa, const Automaton& candidateNfa, int budget) {
-    Automaton baselineDfa = subsetConstruction(baselineNfa);
-    Automaton candidateDfa = subsetConstruction(candidateNfa);
+EquivalenceResult checkEquivalence(const Automaton& baselineNfa, const Automaton& candidateNfa,
+                                   int budget, SubsetConstructionLimits subsetLimits) {
+    std::optional<Automaton> baselineDfaResult = subsetConstructionBounded(baselineNfa, subsetLimits);
+    if (!baselineDfaResult) {
+        EquivalenceResult result;
+        result.status = EquivalenceStatus::Inconclusive;
+        result.reason = "Baseline determinization exceeded the configured DFA-state limit or work-unit limit.";
+        return result;
+    }
+
+    std::optional<Automaton> candidateDfaResult = subsetConstructionBounded(candidateNfa, subsetLimits);
+    if (!candidateDfaResult) {
+        EquivalenceResult result;
+        result.status = EquivalenceStatus::Inconclusive;
+        result.reason = "Candidate determinization exceeded the configured DFA-state limit or work-unit limit.";
+        return result;
+    }
+
+    Automaton baselineDfa = std::move(*baselineDfaResult);
+    Automaton candidateDfa = std::move(*candidateDfaResult);
 
     std::unordered_set<std::string> alphabetSet;
     for (const auto& s : alphabetOfDfa(baselineDfa)) alphabetSet.insert(s);

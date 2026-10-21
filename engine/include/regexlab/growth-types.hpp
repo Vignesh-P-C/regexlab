@@ -79,11 +79,12 @@ struct CandidateEdgeId {
     int target = 0;
 };
 
-enum class CandidateEditKind { DeleteEpsilonEdge };
+enum class CandidateEditKind { DeleteEpsilonEdge, DeleteEpsilonEdges };
 
 struct CandidateEdit {
     CandidateEditKind kind = CandidateEditKind::DeleteEpsilonEdge;
     CandidateEdgeId edge;
+    std::vector<CandidateEdgeId> edges{};
 };
 
 struct EquivalenceWitness {

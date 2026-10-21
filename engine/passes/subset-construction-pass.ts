@@ -52,13 +52,45 @@ import type { Automaton } from "../types.js";
 import type { SubsetConstructionStep, SubsetTrace } from "../growth-types.js";
 import { decodeCharacterSet, transitionMatches } from "../character-set.js";
 
-function epsilonClosure(nfa: Automaton, states: Iterable<number>): Set<number> {
+export type SubsetConstructionLimits = {
+  /** Maximum number of distinct reachable subsets (DFA states). */
+  maxDfaStates: number;
+  /**
+   * Deterministic work units charged for inspected NFA edges, alphabet
+   * expansion, subset-key construction, and each state/symbol pair.
+   */
+  maxWorkUnits: number;
+};
+
+export const DEFAULT_SUBSET_CONSTRUCTION_LIMITS: Readonly<SubsetConstructionLimits> = Object.freeze({
+  maxDfaStates: 20_000,
+  maxWorkUnits: 1_000_000,
+});
+
+export type BoundedSubsetConstructionResult =
+  | { ok: true; dfa: Automaton }
+  | { ok: false; reason: string };
+
+type WorkBudget = { remaining: number };
+
+class SubsetConstructionBudgetExceeded extends Error {}
+
+function accountWork(budget: WorkBudget | undefined, amount = 1): void {
+  if (!budget) return;
+  if (amount > budget.remaining) {
+    throw new SubsetConstructionBudgetExceeded("determinization work-unit limit exceeded");
+  }
+  budget.remaining -= amount;
+}
+
+function epsilonClosure(nfa: Automaton, states: Iterable<number>, budget?: WorkBudget): Set<number> {
   const closure = new Set<number>(states);
   const stack = [...closure];
   while (stack.length > 0) {
     const state = stack.pop()!;
     const epsTargets = nfa.transitions.get(state)?.get("eps") ?? [];
     for (const target of epsTargets) {
+      accountWork(budget);
       if (!closure.has(target)) {
         closure.add(target);
         stack.push(target);
@@ -76,10 +108,12 @@ function epsilonClosure(nfa: Automaton, states: Iterable<number>): Set<number> {
  * "cs:" set that happens to include it. transitionMatches() (see
  * character-set.ts) is what tells the two apart.
  */
-function move(nfa: Automaton, states: Iterable<number>, symbol: string): Set<number> {
+function move(nfa: Automaton, states: Iterable<number>, symbol: string, budget?: WorkBudget): Set<number> {
   const result = new Set<number>();
   for (const state of states) {
+    accountWork(budget);
     for (const [label, targets] of nfa.transitions.get(state) ?? []) {
+      accountWork(budget);
       if (transitionMatches(label, symbol)) {
         for (const target of targets) result.add(target);
       }
@@ -94,14 +128,18 @@ function move(nfa: Automaton, states: Iterable<number>, symbol: string): Set<num
  * arrived compacted as a "cs:" set. See this file's header comment for
  * why that expansion happens here and what it costs downstream.
  */
-function alphabetOf(nfa: Automaton): string[] {
+function alphabetOf(nfa: Automaton, budget?: WorkBudget): string[] {
   const symbols = new Set<string>();
   for (const bySymbol of nfa.transitions.values()) {
     for (const label of bySymbol.keys()) {
+      accountWork(budget);
       if (label === "eps") continue;
       const characterSet = decodeCharacterSet(label);
       if (characterSet) {
-        for (const code of characterSet) symbols.add(String.fromCharCode(code));
+        for (const code of characterSet) {
+          accountWork(budget);
+          symbols.add(String.fromCharCode(code));
+        }
       } else if (label.length === 1) {
         symbols.add(label);
       }
@@ -111,22 +149,36 @@ function alphabetOf(nfa: Automaton): string[] {
 }
 
 /** Canonical, order-independent key for a set of NFA states, used to dedupe DFA states. */
-function setKey(states: Set<number>): string {
+function setKey(states: Set<number>, budget?: WorkBudget): string {
+  accountWork(budget, states.size);
   return [...states].sort((a, b) => a - b).join(",");
 }
 
 /** SubsetConstructionPass entry point: NFA in, DFA out (same Automaton shape, no "eps" transitions). */
-export function subsetConstruction(nfa: Automaton): Automaton {
-  const alphabet = alphabetOf(nfa);
+function subsetConstructionImpl(nfa: Automaton, limits?: SubsetConstructionLimits): Automaton {
+  if (
+    limits &&
+    (!Number.isSafeInteger(limits.maxDfaStates) ||
+      limits.maxDfaStates < 0 ||
+      !Number.isSafeInteger(limits.maxWorkUnits) ||
+      limits.maxWorkUnits < 0)
+  ) {
+    throw new RangeError("Subset-construction limits must be non-negative safe integers, with at least one DFA state allowed.");
+  }
+  const budget = limits ? { remaining: limits.maxWorkUnits } : undefined;
+  const alphabet = alphabetOf(nfa, budget);
 
   const stateSets: Set<number>[] = []; // DFA state id -> the NFA-state-set it represents
   const idBySetKey = new Map<string, number>();
   const transitions = new Map<number, Map<string, number[]>>();
 
   function idFor(nfaStateSet: Set<number>): number {
-    const key = setKey(nfaStateSet);
+    const key = setKey(nfaStateSet, budget);
     let id = idBySetKey.get(key);
     if (id === undefined) {
+      if (limits && stateSets.length >= limits.maxDfaStates) {
+        throw new SubsetConstructionBudgetExceeded("determinization DFA-state limit exceeded");
+      }
       id = stateSets.length;
       idBySetKey.set(key, id);
       stateSets.push(nfaStateSet);
@@ -134,7 +186,7 @@ export function subsetConstruction(nfa: Automaton): Automaton {
     return id;
   }
 
-  const startState = idFor(epsilonClosure(nfa, [nfa.startState]));
+  const startState = idFor(epsilonClosure(nfa, [nfa.startState], budget));
 
   // Worklist/fixpoint: process every DFA state exactly once, even though
   // new states can be discovered mid-loop (stateSets.length grows as we go).
@@ -147,10 +199,11 @@ export function subsetConstruction(nfa: Automaton): Automaton {
     processed.add(current);
 
     for (const symbol of alphabet) {
-      const moved = move(nfa, stateSets[current], symbol);
+      accountWork(budget);
+      const moved = move(nfa, stateSets[current], symbol, budget);
       if (moved.size === 0) continue; // no transition on this symbol -> implicit dead state, omitted
 
-      const targetId = idFor(epsilonClosure(nfa, moved));
+      const targetId = idFor(epsilonClosure(nfa, moved, budget));
 
       let bySymbol = transitions.get(current);
       if (!bySymbol) {
@@ -165,6 +218,7 @@ export function subsetConstruction(nfa: Automaton): Automaton {
 
   const acceptStates = new Set<number>();
   stateSets.forEach((nfaStateSet, dfaId) => {
+    accountWork(budget, nfaStateSet.size);
     for (const nfaState of nfaStateSet) {
       if (nfa.acceptStates.has(nfaState)) {
         acceptStates.add(dfaId);
@@ -179,6 +233,26 @@ export function subsetConstruction(nfa: Automaton): Automaton {
     acceptStates,
     transitions,
   };
+}
+
+/** Runs determinization with explicit state and work caps for opt-in analysis. */
+export function subsetConstructionBounded(
+  nfa: Automaton,
+  limits: SubsetConstructionLimits = DEFAULT_SUBSET_CONSTRUCTION_LIMITS,
+): BoundedSubsetConstructionResult {
+  try {
+    return { ok: true, dfa: subsetConstructionImpl(nfa, limits) };
+  } catch (error) {
+    if (error instanceof SubsetConstructionBudgetExceeded) {
+      return { ok: false, reason: error.message };
+    }
+    throw error;
+  }
+}
+
+/** The ordinary pipeline retains its existing unbounded behavior and output. */
+export function subsetConstruction(nfa: Automaton): Automaton {
+  return subsetConstructionImpl(nfa);
 }
 
 /**
