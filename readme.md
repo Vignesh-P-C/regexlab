@@ -122,8 +122,11 @@ regexlab/
 │   │   ├── types/engine.ts                   # mirrors the JSON wire format exactly
 │   │   ├── lib/
 │   │   │   ├── steps.ts                      # AST and automaton playback traces
-│   │   │   └── transition-label-layout.ts    # estimates label bounds and routes around nodes, labels, and edges
-│   │   │                                      # geometry regressions: transition-label-layout.test.ts
+│   │   │   ├── transition-label-layout.ts    # estimates label bounds and routes around nodes, labels, and edges
+│   │   │   │                                  # geometry regressions: transition-label-layout.test.ts
+│   │   │   └── nfa-fragment-layout.ts        # NFA view only: layers states by Thompson construction order (not BFS
+│   │   │                                      # depth) so loop-back vs. bypass edges are classified correctly;
+│   │   │                                      # DFA/min-DFA views are unaffected. Tests: nfa-fragment-layout.test.ts
 │   │   └── components/                       # PatternInput, PlaybackControls, AutomatonView; SuggestionBanner stubbed, unwired
 │   └── public/wasm/                          # regexlab.js + regexlab.wasm go here (built locally, not committed)
 ├── api/
