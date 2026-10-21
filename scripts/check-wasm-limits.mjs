@@ -58,6 +58,29 @@ function check(label, pattern, input, expectation) {
   console.log(`${pass ? "PASS" : "FAIL"}  ${label.padEnd(30)} ${text}`);
 }
 
+/**
+ * Like check(), but also asserts a wall-clock budget for the whole
+ * spawned-child probe (module load + runPipeline). Added for the issue
+ * #64 follow-up (MinimizationPass alphabet-compression fix): these probes
+ * sit at the largest LEGAL (under the 500-char cap) sizes for each
+ * extended-syntax construct, which is exactly the shape that was ~6.8s
+ * pre-fix for `.` x500 alone. maxMs is deliberately generous over the
+ * measured in-process minimize() time (which does not include per-probe
+ * Node startup + WASM instantiation overhead) so the probe doesn't flake
+ * on a loaded machine, while staying far below the pre-fix regression
+ * time -- so if the compression fix is ever lost, these probes fail loud
+ * well before the old ~6.8s shows up.
+ */
+function checkTimed(label, pattern, input, expectation, maxMs) {
+  const t0 = Date.now();
+  const { handled, text } = probe(pattern, input);
+  const elapsedMs = Date.now() - t0;
+  const outcomeOk = expectation ? handled && text.startsWith(expectation) : handled;
+  const pass = outcomeOk && elapsedMs <= maxMs;
+  rows.push({ label, text, pass });
+  console.log(`${pass ? "PASS" : "FAIL"}  ${label.padEnd(30)} ${text}  (${elapsedMs}ms, budget ${maxMs}ms)`);
+}
+
 console.log(`WASM under test: ${wasmJs}\n`);
 console.log("-- #14 acceptance cases --");
 check("(a|b)*ab on aab", "(a|b)*ab", "aab", "ok match");
@@ -94,6 +117,19 @@ check("escaped non-ASCII", "a\\\u00e9", "a", "UnexpectedToken@2");
 check("non-ASCII at 499 then long ASCII tail", "a".repeat(499) + "\u00e9" + "a".repeat(50000), "a", "UnexpectedToken@499");
 check("crossover e-acute x300", "\u00e9".repeat(300), "a", "UnexpectedToken@0");
 check("escaped non-ASCII + long tail", "\\\u00e9" + "a".repeat(5000), "a", "UnexpectedToken@1");
+
+console.log("\n-- issue #64 follow-up: largest LEGAL (<=500 char) extended-syntax sizes, with a time budget --");
+// Thresholds derived from measured in-process WASM timings post-fix (3-run
+// means): `.` x500 ~326ms, `\w` x250 (500 chars) ~74ms, `[^a]` x125 (500
+// chars) ~56ms, a short mixed pattern ~3ms. Each threshold below gives
+// roughly 5-6x headroom over that measurement for spawned-child overhead
+// (fresh Node process + WASM instantiation per probe), while staying far
+// under the ~6.8s this exact `.` x500 case cost before the alphabet-
+// compression fix -- so a regression back to the old cost still fails loud.
+checkTimed("dot x500 (500 chars, at the cap)", ".".repeat(500), "a", "ok", 2000);
+checkTimed("shorthand-w x250 (500 chars, at the cap)", "\\w".repeat(250), "a", "ok", 1000);
+checkTimed("negclass x125 (500 chars, at the cap)", "[^a]".repeat(125), "a", "ok", 1000);
+checkTimed("mixed .*a\\w*b", ".*a\\w*b", "xxaab", "ok match", 500);
 
 const failed = rows.filter((r) => !r.pass);
 console.log(`\n${rows.length - failed.length}/${rows.length} passed`);
