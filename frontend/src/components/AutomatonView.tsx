@@ -2,6 +2,11 @@ import { useEffect, useRef } from "react";
 import type { ASTNode, Automaton, Stage } from "../types/engine";
 import { postOrderAstNodes } from "../lib/steps";
 import { formatTransitionSymbols } from "../../../engine/character-set.js";
+import {
+  estimateTransitionLabelWidth,
+  placeTransitionLabels,
+  type LabelRoute,
+} from "../lib/transition-label-layout";
 
 type Props = {
   stage: Stage;
@@ -64,7 +69,6 @@ function groupEdges(transitions: Automaton["transitions"]): GraphEdge[] {
 // The control point sits PAIR_CURVE off the chord; the curve itself bulges by
 // half of that.
 const PAIR_CURVE = 36;
-const LABEL_GAP = 11;
 
 /**
  * Quadratic-curve geometry for an edge between two state centers. `curve` is
@@ -89,11 +93,7 @@ function edgeGeometry(a: Point, b: Point, curve: number) {
   const start = rim(a);
   const end = rim(b);
 
-  // Curve midpoint (t = 0.5), then nudge the label to the bulging side.
-  const mid = { x: 0.25 * start.x + 0.5 * ctrl.x + 0.25 * end.x, y: 0.25 * start.y + 0.5 * ctrl.y + 0.25 * end.y };
-  const side = curve === 0 ? 1 : Math.sign(curve);
-  const label = { x: mid.x + nx * side * LABEL_GAP, y: mid.y + ny * side * LABEL_GAP + 4 };
-  return { start, end, ctrl, label };
+  return { start, end, ctrl };
 }
 
 // #25: layered left-to-right layout. A state's column is its BFS distance
@@ -168,14 +168,18 @@ function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[
   // Sized from content alone (margins already include self-loop/arrow
   // clearance) -- no floor, so small automatons aren't padded into an
   // oversized canvas they then have to be shrunk back out of.
-  const width = 2 * MARGIN_X + (columns - 1) * LAYER_GAP;
+  const layerGap = Math.max(
+    LAYER_GAP,
+    ...edges.map((edge) => estimateTransitionLabelWidth(formatTransitionSymbols(edge.symbols)) + 2 * NODE_R + 24),
+  );
+  const width = 2 * MARGIN_X + (columns - 1) * layerGap;
   const height = 2 * MARGIN_Y + (tallest - 1) * ROW_GAP;
 
   const positions: Point[] = new Array(stateCount);
   for (const row of rows) {
     row.forEach((id, i) => {
       positions[id] = {
-        x: MARGIN_X + layer[id] * LAYER_GAP,
+        x: MARGIN_X + layer[id] * layerGap,
         y: height / 2 + (i - (row.length - 1) / 2) * ROW_GAP,
       };
     });
@@ -203,11 +207,74 @@ function AutomatonGraph({
   // ANY of its symbols was the one actually taken.
   const traversedKeys = new Set(traversedEdges.map((e) => `${e.from}>${e.to}`));
 
+  // Calculate every path first, then place labels against all paths and nodes.
+  // The same route objects drive drawing and text placement so playback
+  // highlighting remains attached to the edge the label describes.
+  const labelRoutes: LabelRoute[] = edges.map((e) => {
+    const key = `${e.from}>${e.to}`;
+    const label = formatTransitionSymbols(e.symbols);
+    const a = positions[e.from];
+    const b = positions[e.to];
+    if (e.from === e.to) {
+      const neighbours = edges
+        .filter((other) => other.from !== other.to && (other.from === e.from || other.to === e.from))
+        .map((other) => positions[other.from === e.from ? other.to : other.from]);
+      const above = neighbours.some((point) => point.y - a.y < -Math.abs(point.x - a.x) * 0.6);
+      const below = neighbours.some((point) => point.y - a.y > Math.abs(point.x - a.x) * 0.6);
+      const direction = above && !below ? 1 : -1;
+      return {
+        key,
+        label,
+        start: { x: a.x - 8, y: a.y + direction * NODE_R },
+        control: { x: a.x, y: a.y + direction * (NODE_R + 24) },
+        end: { x: a.x + 8, y: a.y + direction * NODE_R },
+        preferredSide: direction,
+      };
+    }
+
+    const twoWay = edgeKeys.has(`${e.to}>${e.from}`);
+    const span = layer[e.to] - layer[e.from];
+    const skips = span <= 0 || span > 1;
+    const wantDown = span < 0;
+    const prefer = (b.x - a.x >= 0 ? 1 : -1) * (wantDown ? 1 : -1);
+    const curve = !skips
+      ? twoWay ? PAIR_CURVE : 0
+      : twoWay
+        ? clearCurve(a, b, [e.from, e.to], positions, [1])
+        : clearCurve(a, b, [e.from, e.to], positions, [prefer, -prefer]);
+    const geometry = edgeGeometry(a, b, curve);
+    return {
+      key,
+      label,
+      start: geometry.start,
+      control: geometry.ctrl,
+      end: geometry.end,
+      preferredSide: curve === 0 ? 1 : Math.sign(curve),
+    };
+  });
+  const placedLabels = placeTransitionLabels(labelRoutes, positions);
+  const routeByKey = new Map(labelRoutes.map((route) => [route.key, route]));
+  const geometryPoints: Point[] = [
+    ...positions,
+    ...labelRoutes.flatMap((route) => [route.start, route.control, route.end]),
+    ...Array.from(placedLabels.values()).flatMap(({ bounds }) => [
+      { x: bounds.left, y: bounds.top },
+      { x: bounds.right, y: bounds.bottom },
+    ]),
+  ];
+  const viewMinX = Math.min(0, ...geometryPoints.map((point) => point.x)) - 12;
+  const viewMinY = Math.min(0, ...geometryPoints.map((point) => point.y)) - 12;
+  const viewMaxX = Math.max(width, ...geometryPoints.map((point) => point.x)) + 12;
+  const viewMaxY = Math.max(height, ...geometryPoints.map((point) => point.y)) + 12;
+  const graphWidth = viewMaxX - viewMinX;
+  const graphHeight = viewMaxY - viewMinY;
+  const viewBox = [viewMinX, viewMinY, graphWidth, graphHeight].join(" ");
+
   return (
     <svg
-      viewBox={`0 0 ${width} ${height}`}
+      viewBox={viewBox}
       className="automaton-svg"
-      style={{ minWidth: width * MIN_GRAPH_SCALE, maxWidth: width }}
+      style={{ minWidth: graphWidth * MIN_GRAPH_SCALE, maxWidth: graphWidth }}
     >
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -216,60 +283,20 @@ function AutomatonGraph({
       </defs>
 
       {edges.map((e) => {
-        const a = positions[e.from];
-        const b = positions[e.to];
-        const label = formatTransitionSymbols(e.symbols);
         const key = `${e.from}>${e.to}`;
-        if (e.from === e.to) {
-          // The loop sits above its state, unless an edge already leaves or enters
-          // from above; then it goes underneath so it can't run along that edge.
-          const neighbours = edges
-            .filter((o) => o.from !== o.to && (o.from === e.from || o.to === e.from))
-            .map((o) => positions[o.from === e.from ? o.to : o.from]);
-          const above = neighbours.some((q) => q.y - a.y < -Math.abs(q.x - a.x) * 0.6);
-          const below = neighbours.some((q) => q.y - a.y > Math.abs(q.x - a.x) * 0.6);
-          const dir = above && !below ? 1 : -1; // 1 = underneath, -1 = above
-          const loopY = a.y + dir * (NODE_R + 24);
-          return (
-            <g key={key}>
-              <path
-                d={`M ${a.x - 8} ${a.y + dir * NODE_R} Q ${a.x} ${loopY} ${a.x + 8} ${a.y + dir * NODE_R}`}
-                fill="none"
-                stroke="currentColor"
-                markerEnd="url(#arrow)"
-                className={traversedKeys.has(key) ? "traversed" : undefined}
-              />
-              <text x={a.x} y={dir === 1 ? loopY + 14 : loopY - 4} textAnchor="middle" fontSize="12" className="edge-label">
-                {label}
-              </text>
-            </g>
-          );
-        }
-        const twoWay = edgeKeys.has(`${e.to}>${e.from}`);
-        // Column distance: negative = back edge, > 1 = skips a column. Both would
-        // otherwise run straight through the states in between, so they bow out.
-        const span = layer[e.to] - layer[e.from];
-        const skips = span < 0 || span > 1;
-        // Back edges bow down, forward skips bow up (a positive curve bows down
-        // for a rightward edge and up for a leftward one).
-        const wantDown = span < 0;
-        const prefer = (b.x - a.x >= 0 ? 1 : -1) * (wantDown ? 1 : -1);
-        const curve = !skips
-          ? twoWay ? PAIR_CURVE : 0
-          : twoWay
-            ? clearCurve(a, b, [e.from, e.to], positions, [1])
-            : clearCurve(a, b, [e.from, e.to], positions, [prefer, -prefer]);
-        const g = edgeGeometry(a, b, curve);
+        const route = routeByKey.get(key)!;
+        const label = formatTransitionSymbols(e.symbols);
+        const placed = placedLabels.get(key)!;
         return (
           <g key={key}>
             <path
-              d={`M ${g.start.x} ${g.start.y} Q ${g.ctrl.x} ${g.ctrl.y} ${g.end.x} ${g.end.y}`}
+              d={"M " + route.start.x + " " + route.start.y + " Q " + route.control.x + " " + route.control.y + " " + route.end.x + " " + route.end.y}
               fill="none"
               stroke="currentColor"
               markerEnd="url(#arrow)"
               className={traversedKeys.has(key) ? "traversed" : undefined}
             />
-            <text x={g.label.x} y={g.label.y} textAnchor="middle" fontSize="12" className="edge-label">
+            <text x={placed.x} y={placed.y} textAnchor="middle" fontSize="12" className="edge-label">
               {label}
             </text>
           </g>
