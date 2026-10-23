@@ -147,21 +147,6 @@ export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }
             </p>
           </section>
 
-          <details className="growth-bound">
-            <summary>
-              <span>
-                <strong>Research-based structural upper bound</strong>
-                <small>Why this value is not shown yet</small>
-              </span>
-              <span className="growth-status-pill">Not computed</span>
-            </summary>
-            {analysis.analysis.bound.status === "not-computed" ? (
-              <p>{analysis.analysis.bound.reason}</p>
-            ) : (
-              <p>{analysis.analysis.bound.method}: {analysis.analysis.bound.value}</p>
-            )}
-          </details>
-
           <details className="growth-trace growth-section">
             <summary>
               <span>
