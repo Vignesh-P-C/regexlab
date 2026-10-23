@@ -58,12 +58,30 @@ describe("layoutNfaFragments (#61 follow-up: textbook NFA layout)", () => {
     expect(layer[3] - layer[2]).toBeGreaterThan(1);
   });
 
-  it("plus has no skip edge: its own accept sits right after the loop, not off to one side", () => {
+  it("a+ is laid out as a mandatory copy, a repeating copy, and one shared accept", () => {
     const ast: ASTNode = { kind: "plus", child: char("a") };
-    const { layer } = layoutNfaFragments(ast);
-    // start=2 at 0, inner 0,1 at 1,2, plus's accept=3 at 3 -- same shape as
-    // star's, since plus still runs the body as the main chain.
-    expect(layer).toEqual([1, 2, 0, 3]);
+    const { layer, stateCount } = layoutNfaFragments(ast);
+    expect(stateCount).toBe(5);
+    expect(layer).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("a+bcd places both plus exits before the shared b continuation", () => {
+    const ast: ASTNode = {
+      kind: "concat",
+      left: {
+        kind: "concat",
+        left: {
+          kind: "concat",
+          left: { kind: "plus", child: char("a") },
+          right: char("b"),
+        },
+        right: char("c"),
+      },
+      right: char("d"),
+    };
+    const { layer, stateCount } = layoutNfaFragments(ast);
+    expect(stateCount).toBe(10);
+    expect(layer).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
   it("stays correct for a pattern with both a loop and a skip competing for the shortest BFS path", () => {
