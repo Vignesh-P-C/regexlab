@@ -17,6 +17,8 @@
 #include "regexlab/character-set.hpp"
 
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace regexlab {
 
@@ -26,6 +28,10 @@ namespace {
 struct Fragment {
     int start;
     int accept;
+    std::vector<int> inlineExits;
+
+    Fragment(int startState, int acceptState, std::vector<int> exits = {})
+        : start(startState), accept(acceptState), inlineExits(std::move(exits)) {}
 };
 
 class NFABuilder {
@@ -50,7 +56,7 @@ private:
     std::unordered_map<int, std::unordered_map<std::string, std::vector<int>>> transitions_;
 };
 
-Fragment buildFragment(const ASTNodePtr& node, NFABuilder& builder) {
+Fragment buildFragment(const ASTNodePtr& node, NFABuilder& builder, bool inlineTerminalPlus = false) {
     Fragment result{0, 0};
 
     std::visit(
@@ -78,10 +84,16 @@ Fragment buildFragment(const ASTNodePtr& node, NFABuilder& builder) {
                 result = Fragment{start, accept};
 
             } else if constexpr (std::is_same_v<T, ConcatNode>) {
-                Fragment left = buildFragment(n.left, builder);
-                Fragment right = buildFragment(n.right, builder);
-                builder.addTransition(left.accept, "eps", right.start);
-                result = Fragment{left.start, right.accept};
+                Fragment left = buildFragment(n.left, builder, true);
+                Fragment right = buildFragment(n.right, builder, inlineTerminalPlus);
+                if (left.inlineExits.empty()) {
+                    builder.addTransition(left.accept, "eps", right.start);
+                } else {
+                    for (int exit : left.inlineExits) {
+                        builder.addTransition(exit, "eps", right.start);
+                    }
+                }
+                result = Fragment{left.start, right.accept, right.inlineExits};
 
             } else if constexpr (std::is_same_v<T, AltNode>) {
                 Fragment left = buildFragment(n.left, builder);
@@ -105,16 +117,20 @@ Fragment buildFragment(const ASTNodePtr& node, NFABuilder& builder) {
                 result = Fragment{start, accept};
 
             } else if constexpr (std::is_same_v<T, PlusNode>) {
-                // "One or more": like star, but with NO skip edge from
-                // start to accept — the inner fragment must be entered at
-                // least once before the loop-back/exit choice applies.
-                Fragment inner = buildFragment(n.child, builder);
-                int start = builder.newState();
-                int accept = builder.newState();
-                builder.addTransition(start, "eps", inner.start);
-                builder.addTransition(inner.accept, "eps", inner.start);
-                builder.addTransition(inner.accept, "eps", accept);
-                result = Fragment{start, accept};
+                // A mandatory copy followed by a repeating copy. When
+                // concatenated, expose both exits to share the continuation.
+                Fragment first = buildFragment(n.child, builder);
+                Fragment repeated = buildFragment(n.child, builder);
+                builder.addTransition(first.accept, "eps", repeated.start);
+                builder.addTransition(repeated.accept, "eps", repeated.start);
+                if (inlineTerminalPlus) {
+                    result = Fragment{first.start, repeated.accept, {first.accept, repeated.accept}};
+                } else {
+                    int accept = builder.newState();
+                    builder.addTransition(first.accept, "eps", accept);
+                    builder.addTransition(repeated.accept, "eps", accept);
+                    result = Fragment{first.start, accept};
+                }
 
             } else if constexpr (std::is_same_v<T, OptionalNode>) {
                 // "Zero or one": like star's skip edge, but with NO

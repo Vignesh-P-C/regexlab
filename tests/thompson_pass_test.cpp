@@ -102,13 +102,33 @@ TEST_CASE("ThompsonPass — composition", "[thompson]") {
 }
 
 
-TEST_CASE("ThompsonPass — plus requires one repetition", "[thompson][extended]") {
+TEST_CASE("ThompsonPass — plus is mandatory followed by a repeating copy", "[thompson][extended]") {
     auto nfa = nfaFor("a+");
-    REQUIRE(nfa.stateCount == 4);
-    REQUIRE(nfa.startState == 2);
+    REQUIRE(nfa.stateCount == 5);
+    REQUIRE(nfa.startState == 0);
+    REQUIRE(nfa.acceptStates == std::unordered_set<int>{4});
     auto flat = flatten(nfa);
-    REQUIRE(flat.at(2).at("eps") == std::vector<int>{0});
-    REQUIRE(flat.at(1).at("eps") == std::vector<int>{0, 3});
+    REQUIRE(flat.at(0).at("a") == std::vector<int>{1});
+    REQUIRE(flat.at(1).at("eps") == std::vector<int>{2, 4});
+    REQUIRE(flat.at(2).at("a") == std::vector<int>{3});
+    REQUIRE(flat.at(3).at("eps") == std::vector<int>{2, 4});
+}
+
+TEST_CASE("ThompsonPass — plus exits connect directly to the next fragment", "[thompson][extended]") {
+    auto nfa = nfaFor("a+bcd");
+    REQUIRE(nfa.stateCount == 10);
+    REQUIRE(nfa.startState == 0);
+    REQUIRE(nfa.acceptStates == std::unordered_set<int>{9});
+    auto flat = flatten(nfa);
+    REQUIRE(flat.at(0).at("a") == std::vector<int>{1});
+    REQUIRE(flat.at(1).at("eps") == std::vector<int>{2, 4});
+    REQUIRE(flat.at(2).at("a") == std::vector<int>{3});
+    REQUIRE(flat.at(3).at("eps") == std::vector<int>{2, 4});
+    REQUIRE(flat.at(4).at("b") == std::vector<int>{5});
+    REQUIRE(flat.at(5).at("eps") == std::vector<int>{6});
+    REQUIRE(flat.at(6).at("c") == std::vector<int>{7});
+    REQUIRE(flat.at(7).at("eps") == std::vector<int>{8});
+    REQUIRE(flat.at(8).at("d") == std::vector<int>{9});
 }
 
 TEST_CASE("ThompsonPass — optional has a skip branch", "[thompson][extended]") {

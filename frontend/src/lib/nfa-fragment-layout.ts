@@ -21,7 +21,7 @@ import type { ASTNode } from "../types/engine";
  */
 export type FragmentNfaLayout = { layer: number[]; stateCount: number };
 
-type Fragment = { start: number; accept: number; entryLayer: number; exitLayer: number };
+type Fragment = { start: number; accept: number; entryLayer: number; exitLayer: number; inlineExitLayers?: number[] };
 
 class LayoutBuilder {
   private nextId = 0;
@@ -34,7 +34,12 @@ class LayoutBuilder {
   }
 }
 
-function buildFragment(node: ASTNode, startLayer: number, builder: LayoutBuilder): Fragment {
+function buildFragment(
+  node: ASTNode,
+  startLayer: number,
+  builder: LayoutBuilder,
+  inlineTerminalPlus = false,
+): Fragment {
   switch (node.kind) {
     case "char":
     case "charset": {
@@ -44,18 +49,21 @@ function buildFragment(node: ASTNode, startLayer: number, builder: LayoutBuilder
     }
 
     case "concat": {
-      const left = buildFragment(node.left, startLayer, builder);
-      // The concat epsilon-edge is one hop, same as any other edge that
-      // isn't a loop-back or a skip, so the right fragment starts one
-      // layer after the left one ends.
-      const right = buildFragment(node.right, left.exitLayer + 1, builder);
-      return { start: left.start, accept: right.accept, entryLayer: startLayer, exitLayer: right.exitLayer };
+      const left = buildFragment(node.left, startLayer, builder, true);
+      const leftExitLayer = Math.max(...(left.inlineExitLayers ?? [left.exitLayer]));
+      const right = buildFragment(node.right, leftExitLayer + 1, builder, inlineTerminalPlus);
+      return {
+        start: left.start,
+        accept: right.accept,
+        entryLayer: startLayer,
+        exitLayer: right.exitLayer,
+        inlineExitLayers: right.inlineExitLayers,
+      };
     }
 
     case "alt": {
-      // Both branches split off the same entry layer; mirrors
-      // thompson-pass.ts's allocation order: left fragment, then right
-      // fragment, THEN the new start/accept states (allocated last).
+      // Both branches split off the same entry layer; mirrors the pass's
+      // allocation order: left fragment, right fragment, then wrapper states.
       const left = buildFragment(node.left, startLayer + 1, builder);
       const right = buildFragment(node.right, startLayer + 1, builder);
       const joinLayer = Math.max(left.exitLayer, right.exitLayer) + 1;
@@ -64,12 +72,32 @@ function buildFragment(node: ASTNode, startLayer: number, builder: LayoutBuilder
       return { start, accept, entryLayer: startLayer, exitLayer: joinLayer };
     }
 
+    case "plus": {
+      // Allocate the required copy first, then the repeatable copy. If a
+      // continuation exists, both accepting states connect directly to it.
+      const first = buildFragment(node.child, startLayer, builder);
+      const repeated = buildFragment(node.child, first.exitLayer + 1, builder);
+      if (inlineTerminalPlus) {
+        return {
+          start: first.start,
+          accept: repeated.accept,
+          entryLayer: first.entryLayer,
+          exitLayer: repeated.exitLayer,
+          inlineExitLayers: [first.exitLayer, repeated.exitLayer],
+        };
+      }
+      const accept = builder.newState(repeated.exitLayer + 1);
+      return {
+        start: first.start,
+        accept,
+        entryLayer: first.entryLayer,
+        exitLayer: repeated.exitLayer + 1,
+      };
+    }
+
     case "star":
-    case "plus":
     case "optional": {
-      // The inner fragment is the "main chain" the diagram reads through;
-      // the skip (star/optional) and loop-back (star/plus) edges are the
-      // two bows off of it, not part of the chain's own length.
+      // Keep the existing textbook Thompson wrapper for star and optional.
       const inner = buildFragment(node.child, startLayer + 1, builder);
       const exitLayer = inner.exitLayer + 1;
       const start = builder.newState(startLayer);

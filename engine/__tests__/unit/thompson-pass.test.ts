@@ -77,6 +77,39 @@ describe("ThompsonPass — Kleene star", () => {
   });
 });
 
+describe("ThompsonPass — plus", () => {
+  it("'a+' is a mandatory copy followed by a repeatable copy", () => {
+    const nfa = nfaFor("a+");
+    expect(nfa.stateCount).toBe(5);
+    expect(nfa.startState).toBe(0);
+    expect(nfa.acceptStates).toEqual(new Set([4]));
+    expect(flat(nfa)).toEqual({
+      0: { a: [1] },
+      1: { eps: [2, 4] },
+      2: { a: [3] },
+      3: { eps: [2, 4] },
+    });
+  });
+
+  it("'a+bcd' connects both plus exits directly to the following b fragment", () => {
+    const nfa = nfaFor("a+bcd");
+    expect(nfa.stateCount).toBe(10);
+    expect(nfa.startState).toBe(0);
+    expect(nfa.acceptStates).toEqual(new Set([9]));
+    expect(flat(nfa)).toEqual({
+      0: { a: [1] },
+      1: { eps: [2, 4] },
+      2: { a: [3] },
+      3: { eps: [2, 4] },
+      4: { b: [5] },
+      5: { eps: [6] },
+      6: { c: [7] },
+      7: { eps: [8] },
+      8: { d: [9] },
+    });
+  });
+});
+
 describe("ThompsonPass — composition", () => {
   it("'(a|b)*' composes star around alt correctly (structural sanity check)", () => {
     const nfa = nfaFor("(a|b)*");
