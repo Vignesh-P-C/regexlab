@@ -132,7 +132,10 @@ regexlab/
 │   │   │   ├── steps.ts                      # AST and automaton playback traces
 │   │   │   ├── transition-label-layout.ts    # estimates label bounds and routes around nodes, labels, and edges
 │   │   │   │                                  # geometry regressions: transition-label-layout.test.ts
-│   │   │   └── growth.ts                     # 🆕 #68 PR A: lists eligible ε-edges from the JSON Automaton for the what-if panel
+│   │   │   ├── growth.ts                     # 🆕 #68 PR A: lists eligible ε-edges from the JSON Automaton for the what-if panel
+│   │   │   └── nfa-fragment-layout.ts        # NFA view only: layers states by Thompson construction order (not BFS
+│   │   │                                      # depth) so loop-back vs. bypass edges are classified correctly;
+│   │   │                                      # DFA/min-DFA views are unaffected. Tests: nfa-fragment-layout.test.ts
 │   │   └── components/                       # PatternInput, PlaybackControls, AutomatonView; GrowthPanel 🆕 #68 PR A; SuggestionBanner stubbed, unwired
 │   └── public/wasm/                          # regexlab.js + regexlab.wasm go here (built locally, not committed)
 ├── api/

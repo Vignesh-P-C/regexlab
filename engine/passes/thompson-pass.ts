@@ -7,12 +7,13 @@
  * fragments together according to fixed rules per operator. This is the
  * textbook construction from Aho/Lam/Sethi/Ullman Ch. 3.
  *
- * Key invariant, worth being able to state in a viva: every fragment
- * this pass ever produces has EXACTLY ONE start state and EXACTLY ONE
- * accept state, with no transitions leaving the accept state and no
- * transitions entering the start state from outside the fragment. That
- * invariant is what makes the combination rules below always valid,
- * regardless of how deeply nested the AST is.
+ * Most fragments carry one start state and one accept state. When plus
+ * is the left operand of concatenation, its mandatory and repeating copies
+ * expose two continuation exits so both can connect directly to the next
+ * fragment. A top-level plus still receives one shared accept state.
+ *
+ * This keeps the a+ graph equivalent to a.a* while avoiding an extra
+ * plus-accept/concatenation seam before a following fragment.
  *
  * The construction rules (each returns a new fragment from its input
  * fragment(s)):
@@ -22,7 +23,7 @@
  *   charset:       (s) --cs:<bitmap>--> (f)   one edge for the WHOLE set
  *                  (grammar v1 / issue #60 — see below)
  *
- *   concat(A, B):  A.accept --eps--> B.start
+ *   concat(A, B):  each continuation exit of A --eps--> B.start
  *                  new fragment = (A.start, B.accept)
  *
  *   alt(A, B):     new start s --eps--> A.start
@@ -37,10 +38,11 @@
  *                  A.accept --eps--> f       (exit after any rep)
  *                  new fragment = (s, f)
  *
- *   plus(A):       new start s --eps--> A.start
- *                  A.accept --eps--> A.start (loop back: repeat)
- *                  A.accept --eps--> new accept f
- *                  new fragment = (s, f)      (grammar v1 — see below)
+ *   plus(A):       build mandatory A and repeating A copies
+ *                  mandatory.accept --eps--> repeating.start
+ *                  repeating.accept --eps--> repeating.start (repeat)
+ *                  both copy accepts continue to the next concat fragment,
+ *                  or connect to one shared accept when plus is top-level
  *
  *   optional(A):   new start s --eps--> A.start
  *                  s --eps--> new accept f   (skip A entirely: zero reps)
@@ -62,10 +64,9 @@
  *     into one ordinary per-character DFA transition per matching code — see
  *     that pass's own comment for why that expansion, not this fragment
  *     rule, is what makes a wide class expensive downstream.
- *   - `plus` is "one or more": textbook-equivalent to `concat(A, star(A))`,
- *     but built directly as its own 2-state fragment (enter once, loop back,
- *     no skip edge) instead of literally duplicating A's fragment — so `a+`
- *     gets one copy of A's states, not two.
+ *   - plus is "one or more", represented as a mandatory copy followed by
+ *     a repeating copy. In concatenation, both possible exits connect directly
+ *     to the continuation; at the root, both connect to one shared accept.
  *   - `optional` is "zero or one": a skip edge straight to the new accept
  *     state, exactly like star's skip edge, but with NO loop-back edge
  *     (so at most one repetition is ever possible).
@@ -75,7 +76,7 @@ import type { ASTNode, Automaton } from "../types.js";
 import { encodeCharacterSet } from "../character-set.js";
 
 /** A fragment under construction: exactly one start state, one accept state. */
-type Fragment = { start: number; accept: number };
+type Fragment = { start: number; accept: number; inlineExits?: number[] };
 
 class NFABuilder {
   private stateCount = 0;
@@ -109,7 +110,7 @@ class NFABuilder {
   }
 }
 
-function buildFragment(node: ASTNode, builder: NFABuilder): Fragment {
+function buildFragment(node: ASTNode, builder: NFABuilder, inlineTerminalPlus = false): Fragment {
   switch (node.kind) {
     case "char": {
       const start = builder.newState();
@@ -132,10 +133,12 @@ function buildFragment(node: ASTNode, builder: NFABuilder): Fragment {
     }
 
     case "concat": {
-      const left = buildFragment(node.left, builder);
-      const right = buildFragment(node.right, builder);
-      builder.addTransition(left.accept, "eps", right.start);
-      return { start: left.start, accept: right.accept };
+      const left = buildFragment(node.left, builder, true);
+      const right = buildFragment(node.right, builder, inlineTerminalPlus);
+      for (const exit of left.inlineExits ?? [left.accept]) {
+        builder.addTransition(exit, "eps", right.start);
+      }
+      return { start: left.start, accept: right.accept, inlineExits: right.inlineExits };
     }
 
     case "alt": {
@@ -161,17 +164,27 @@ function buildFragment(node: ASTNode, builder: NFABuilder): Fragment {
       return { start, accept };
     }
 
-    // "One or more": like star, but with NO skip edge from start to
-    // accept — the inner fragment must be entered at least once before
-    // the loop-back/exit choice applies.
+    // One or more: a mandatory copy followed by a repeating copy. If a
+    // following concatenation exists, expose both exits so that its start is
+    // shared directly instead of allocating another plus accept state.
     case "plus": {
-      const inner = buildFragment(node.child, builder);
-      const start = builder.newState();
+      const first = buildFragment(node.child, builder);
+      const repeated = buildFragment(node.child, builder);
+      builder.addTransition(first.accept, "eps", repeated.start);
+      builder.addTransition(repeated.accept, "eps", repeated.start);
+
+      if (inlineTerminalPlus) {
+        return {
+          start: first.start,
+          accept: repeated.accept,
+          inlineExits: [first.accept, repeated.accept],
+        };
+      }
+
       const accept = builder.newState();
-      builder.addTransition(start, "eps", inner.start);
-      builder.addTransition(inner.accept, "eps", inner.start);
-      builder.addTransition(inner.accept, "eps", accept);
-      return { start, accept };
+      builder.addTransition(first.accept, "eps", accept);
+      builder.addTransition(repeated.accept, "eps", accept);
+      return { start: first.start, accept };
     }
 
     // "Zero or one": like star's skip edge, but with NO loop-back edge —

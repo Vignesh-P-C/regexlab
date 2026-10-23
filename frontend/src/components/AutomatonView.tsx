@@ -7,6 +7,7 @@ import {
   placeTransitionLabels,
   type LabelRoute,
 } from "../lib/transition-label-layout";
+import { layoutNfaFragments } from "../lib/nfa-fragment-layout";
 
 type Props = {
   stage: Stage;
@@ -114,51 +115,107 @@ type Layout = { positions: Point[]; layer: number[]; width: number; height: numb
  * preferred side, then the other side, then a bigger bow, and keep the first
  * one that clears every other state. `signs` lists the curve signs allowed.
  */
-function clearCurve(a: Point, b: Point, ends: number[], positions: Point[], signs: number[]): number {
+/** Does bowing the chord a->b by this `curve` keep the resulting arc clear of
+ *  every state other than the edge's own two ends? Shared by `clearCurve`
+ *  (generic "whichever side is clear" choice, DFA/min-DFA) and
+ *  `clearCurveForSide` (NFA's textbook-direction choice, below). */
+function curveClears(a: Point, b: Point, ends: number[], positions: Point[], curve: number): boolean {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dist = Math.hypot(dx, dy) || 1;
   const nx = -dy / dist;
   const ny = dx / dist;
+  const cx = (a.x + b.x) / 2 + nx * curve;
+  const cy = (a.y + b.y) / 2 + ny * curve;
+  for (let t = 0.1; t <= 0.9; t += 0.05) {
+    const px = (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * cx + t * t * b.x;
+    const py = (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * cy + t * t * b.y;
+    for (let id = 0; id < positions.length; id++) {
+      if (!ends.includes(id) && Math.hypot(px - positions[id].x, py - positions[id].y) < CLEARANCE) return false;
+    }
+  }
+  return true;
+}
+
+function clearCurve(a: Point, b: Point, ends: number[], positions: Point[], signs: number[]): number {
   for (const bow of BOW_STEPS) {
     for (const sign of signs) {
       const curve = sign * bow;
-      const cx = (a.x + b.x) / 2 + nx * curve;
-      const cy = (a.y + b.y) / 2 + ny * curve;
-      let clear = true;
-      for (let t = 0.1; t <= 0.9 && clear; t += 0.05) {
-        const px = (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * cx + t * t * b.x;
-        const py = (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * cy + t * t * b.y;
-        positions.forEach((q, id) => {
-          if (!ends.includes(id) && Math.hypot(px - q.x, py - q.y) < CLEARANCE) clear = false;
-        });
-      }
-      if (clear) return curve;
+      if (curveClears(a, b, ends, positions, curve)) return curve;
     }
   }
   return signs[0] * BOW_STEPS[BOW_STEPS.length - 1];
 }
 
-function layeredLayout(stateCount: number, startState: number, edges: GraphEdge[]): Layout {
-  const next = new Map<number, number[]>();
-  for (const e of edges) next.set(e.from, [...(next.get(e.from) ?? []), e.to]);
+/**
+ * NFA view only (#61 follow-up): a hand-drawn Thompson epsilon-NFA always
+ * bows a loop-back edge above the centerline and a bypass/skip edge below
+ * it -- a fixed convention, not "whichever side the layout happens to have
+ * room on" (that generic rule is `clearCurve`, still used for DFA/min-DFA,
+ * where no such convention applies). `curve`'s control point is
+ * `mid + (nx, ny) * curve` with `ny = dx / dist`, so the sign of `curve`
+ * that moves the control point to smaller y (up) is always `-sign(dx)` --
+ * this only depends on which way the edge runs left-to-right, not on its
+ * particular geometry, so it can be computed directly instead of searched for.
+ */
+function clearCurveForSide(
+  a: Point,
+  b: Point,
+  ends: number[],
+  positions: Point[],
+  wantAbove: boolean,
+): number {
+  const dx = b.x - a.x;
+  const upSign = dx === 0 ? -1 : -Math.sign(dx);
+  const preferred = wantAbove ? upSign : -upSign;
+  for (const bow of BOW_STEPS) {
+    if (curveClears(a, b, ends, positions, preferred * bow)) return preferred * bow;
+  }
+  // The textbook side is blocked at every bow radius tried -- bow the other
+  // way rather than draw the arc through a state.
+  for (const bow of BOW_STEPS) {
+    if (curveClears(a, b, ends, positions, -preferred * bow)) return -preferred * bow;
+  }
+  return preferred * BOW_STEPS[BOW_STEPS.length - 1];
+}
 
-  // Breadth-first search from the start state: layer[s] = fewest edges from start to s.
-  const layer = new Array<number>(stateCount).fill(-1);
-  layer[startState] = 0;
-  const queue = [startState];
-  for (let head = 0; head < queue.length; head++) {
-    const s = queue[head];
-    for (const t of next.get(s) ?? []) {
-      if (layer[t] === -1) {
-        layer[t] = layer[s] + 1;
-        queue.push(t);
+/**
+ * `precomputedLayer` (NFA view): layer[i] already assigned by
+ * layoutNfaFragments, from the AST's own recursive structure -- see that
+ * file for why BFS distance isn't the same thing. Omitted (DFA/min-DFA):
+ * plain BFS from the start state, unchanged from before this file's #61
+ * follow-up.
+ */
+function layeredLayout(
+  stateCount: number,
+  startState: number,
+  edges: GraphEdge[],
+  precomputedLayer?: number[],
+): Layout {
+  let layer: number[];
+  if (precomputedLayer) {
+    layer = precomputedLayer;
+  } else {
+    const next = new Map<number, number[]>();
+    for (const e of edges) next.set(e.from, [...(next.get(e.from) ?? []), e.to]);
+
+    // Breadth-first search from the start state: layer[s] = fewest edges from start to s.
+    layer = new Array<number>(stateCount).fill(-1);
+    layer[startState] = 0;
+    const queue = [startState];
+    for (let head = 0; head < queue.length; head++) {
+      const s = queue[head];
+      for (const t of next.get(s) ?? []) {
+        if (layer[t] === -1) {
+          layer[t] = layer[s] + 1;
+          queue.push(t);
+        }
       }
     }
   }
   // Defensive: a state with no path from the start gets its own last column.
   const lastReached = Math.max(0, ...layer);
-  for (let i = 0; i < stateCount; i++) if (layer[i] === -1) layer[i] = lastReached + 1;
+  for (let i = 0; i < stateCount; i++) if (layer[i] === undefined || layer[i] === -1) layer[i] = lastReached + 1;
 
   const columns = Math.max(0, ...layer) + 1;
   const rows: number[][] = Array.from({ length: columns }, () => []);
@@ -192,15 +249,27 @@ function AutomatonGraph({
   automaton,
   activeStates,
   traversedEdges,
+  stage,
+  ast,
 }: {
   automaton: Automaton;
   activeStates: number[];
   traversedEdges: { from: number; to: number; label: string }[];
+  stage: Stage;
+  ast: ASTNode | null;
 }) {
+  const isNfaView = stage === "nfa";
   const { stateCount, startState, acceptStates, transitions } = automaton;
   const edges = groupEdges(transitions);
   const edgeKeys = new Set(edges.map((e) => `${e.from}>${e.to}`));
-  const { positions, layer, width, height } = layeredLayout(stateCount, startState, edges);
+  // The structural (construction-order) layout only applies -- and only
+  // CAN apply -- to the NFA stage: it's built by re-walking the same AST
+  // Thompson's construction consumed, so a DFA/min-DFA (whose states don't
+  // correspond to AST positions at all) always falls through to BFS below.
+  const structuralLayer = isNfaView && ast ? layoutNfaFragments(ast) : null;
+  const precomputedLayer =
+    structuralLayer && structuralLayer.stateCount === stateCount ? structuralLayer.layer : undefined;
+  const { positions, layer, width, height } = layeredLayout(stateCount, startState, edges, precomputedLayer);
   const activeSet = new Set(activeStates);
   // #52: traversedEdges is per-symbol; group it the same way groupEdges
   // groups drawn edges, so a merged multi-symbol edge highlights whenever
@@ -235,13 +304,24 @@ function AutomatonGraph({
     const twoWay = edgeKeys.has(`${e.to}>${e.from}`);
     const span = layer[e.to] - layer[e.from];
     const skips = span <= 0 || span > 1;
-    const wantDown = span < 0;
-    const prefer = (b.x - a.x >= 0 ? 1 : -1) * (wantDown ? 1 : -1);
-    const curve = !skips
-      ? twoWay ? PAIR_CURVE : 0
-      : twoWay
-        ? clearCurve(a, b, [e.from, e.to], positions, [1])
-        : clearCurve(a, b, [e.from, e.to], positions, [prefer, -prefer]);
+    let curve: number;
+    if (isNfaView) {
+      // Classify by span alone, even for a reciprocal pair: a char edge
+      // sitting right next to its own loop-back (e.g. a*'s 0->1 beside
+      // 1->0) is still a plain span-1 forward edge and stays straight --
+      // "twoWay" existing at all isn't reason enough to bow it, only
+      // actually looping back or skipping layers is. Loop-back (span <= 0)
+      // bows above the centerline, bypass/skip (span > 1) bows below.
+      curve = span === 1 ? 0 : clearCurveForSide(a, b, [e.from, e.to], positions, span <= 0);
+    } else if (!skips) {
+      curve = twoWay ? PAIR_CURVE : 0;
+    } else if (twoWay) {
+      curve = clearCurve(a, b, [e.from, e.to], positions, [1]);
+    } else {
+      const wantDown = span < 0;
+      const prefer = (b.x - a.x >= 0 ? 1 : -1) * (wantDown ? 1 : -1);
+      curve = clearCurve(a, b, [e.from, e.to], positions, [prefer, -prefer]);
+    }
     const geometry = edgeGeometry(a, b, curve);
     return {
       key,
@@ -435,7 +515,7 @@ export function AutomatonView({ stage, ast, automaton, activeStates, traversedEd
   if (!automaton) return <div className="automaton-view empty">No pattern parsed yet.</div>;
   return (
     <div className="automaton-view" ref={containerRef}>
-      <AutomatonGraph automaton={automaton} activeStates={activeStates} traversedEdges={traversedEdges} />
+      <AutomatonGraph automaton={automaton} activeStates={activeStates} traversedEdges={traversedEdges} stage={stage} ast={ast} />
     </div>
   );
 }
