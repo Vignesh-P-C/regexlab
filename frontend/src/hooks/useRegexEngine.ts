@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import type { PipelineSnapshot } from "../types/engine";
+import type { CandidateResponse, GrowthAnalysisResult, PipelineSnapshot } from "../types/engine";
 
 type RegexLabModule = {
   runPipeline: (pattern: string, input: string) => string;
+  // issue #68 — Subset Growth / NFA Structure Lab (PR A). Separate,
+  // explicitly-triggered exports — see json_bridge.hpp's header comment
+  // for why these must never run on every keystroke the way runPipeline does.
+  runGrowthAnalysis: (pattern: string) => string;
+  verifyCandidate: (pattern: string, edgeSource: number, edgeTarget: number) => string;
+  verifyCandidateEdges: (pattern: string, edgesJson: string) => string;
 };
 
 type RegexLabModuleFactory = (opts?: {
@@ -80,5 +86,22 @@ export function useRegexEngine() {
     return JSON.parse(moduleRef.current.runPipeline(pattern, input)) as PipelineSnapshot;
   }
 
-  return { state, runPipeline };
+  // issue #68 — explicit, opt-in calls only; never wired into the
+  // pattern/input debounce effect that drives runPipeline above.
+  function runGrowthAnalysis(pattern: string): GrowthAnalysisResult | null {
+    if (!moduleRef.current) return null;
+    return JSON.parse(moduleRef.current.runGrowthAnalysis(pattern)) as GrowthAnalysisResult;
+  }
+
+  function verifyCandidate(pattern: string, edgeSource: number, edgeTarget: number): CandidateResponse | null {
+    if (!moduleRef.current) return null;
+    return JSON.parse(moduleRef.current.verifyCandidate(pattern, edgeSource, edgeTarget)) as CandidateResponse;
+  }
+
+  function verifyCandidateEdges(pattern: string, edgesJson: string): CandidateResponse | null {
+    if (!moduleRef.current) return null;
+    return JSON.parse(moduleRef.current.verifyCandidateEdges(pattern, edgesJson)) as CandidateResponse;
+  }
+
+  return { state, runPipeline, runGrowthAnalysis, verifyCandidate, verifyCandidateEdges };
 }

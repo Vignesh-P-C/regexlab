@@ -43,4 +43,32 @@ namespace regexlab {
  */
 std::string runPipelineJson(const std::string& pattern, const std::string& input);
 
+/**
+ * issue #68 — Subset Growth / NFA Structure Lab (PR A). A SEPARATE entry
+ * point from runPipelineJson(), deliberately: this re-parses/re-builds
+ * the Thompson NFA for `pattern` and runs the (not-free) subset-trace +
+ * metrics analysis, so it must never be called on every keystroke the
+ * way runPipeline() is — see growth-analysis.hpp's header comment.
+ * On parse failure, returns {"ok": false, "error": ParseError} with the
+ * same shape runPipelineJson() uses for the same case.
+ */
+std::string runGrowthAnalysisJson(const std::string& pattern);
+
+/**
+ * issue #68 — verifies ONE candidate edit (v1 supports exactly
+ * "deleteEpsilonEdge", identified by the edge's source/target state ids)
+ * against the pattern's own baseline NFA. Returns
+ * {"ok": true, "candidate": CandidateResult} or
+ * {"ok": false, "error": ParseError} on parse failure.
+ */
+std::string verifyCandidateJson(const std::string& pattern, int edgeSource, int edgeTarget);
+
+/**
+ * Verifies a set of epsilon-edge deletions applied together to one candidate
+ * copy. edgesJson is an array of {source, target} objects selected from the
+ * baseline NFA. Returns an InvalidCandidateEdit error for malformed,
+ * duplicate, or non-existent edges.
+ */
+std::string verifyCandidateEdgesJson(const std::string& pattern, const std::string& edgesJson);
+
 }  // namespace regexlab

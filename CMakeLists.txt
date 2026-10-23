@@ -43,6 +43,11 @@ add_library(regexlab_engine STATIC
     engine/passes/subset-construction-pass.cpp
     engine/passes/minimization-pass.cpp
     engine/passes/matcher-pass.cpp
+    # issue #68 — Subset Growth / NFA Structure Lab (PR A)
+    engine/automaton-metrics.cpp
+    engine/candidate.cpp
+    engine/equivalence.cpp
+    engine/growth-analysis.cpp
 )
 target_include_directories(regexlab_engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/engine/include
@@ -66,6 +71,7 @@ add_executable(engine_tests
     tests/differential_test.cpp
     tests/json_bridge_test.cpp
     tests/parser_cases_fixture_test.cpp
+    tests/growth_analysis_test.cpp
 )
 target_link_libraries(engine_tests PRIVATE regexlab_engine Catch2::Catch2WithMain)
 target_compile_options(engine_tests PRIVATE ${REGEXLAB_WARNING_FLAGS})

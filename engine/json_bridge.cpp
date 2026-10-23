@@ -2,7 +2,12 @@
 #include "regexlab/json_bridge.hpp"
 #include <nlohmann/json.hpp>
 #include <variant>
+#include <set>
+#include "regexlab/candidate.hpp"
 #include "regexlab/pipeline.hpp"
+#include "regexlab/growth-analysis.hpp"
+#include "regexlab/passes/parser-pass.hpp"
+#include "regexlab/passes/thompson-pass.hpp"
 namespace regexlab {
 namespace {
 using json = nlohmann::json;
@@ -42,6 +47,130 @@ json toJson(const PipelineResult& r) {
     else j["error"]=toJson(r.error);
     return j;
 }
+
+// issue #68 — Subset Growth / NFA Structure Lab (PR A) serializers.
+json toJson(const SubsetConstructionStep& s) {
+    return json{{"sourceId",s.sourceId},{"sourceNfaStates",s.sourceNfaStates},{"symbol",s.symbol},
+        {"moveNfaStates",s.moveNfaStates},{"closureNfaStates",s.closureNfaStates},
+        {"targetId",s.targetId},{"isNew",s.isNew},{"isAccepting",s.isAccepting}};
+}
+json toJson(const SubsetTrace& t) {
+    json steps=json::array(); for(const auto& s:t.steps) steps.push_back(toJson(s));
+    return json{{"steps",steps},{"subsetCount",t.subsetCount}};
+}
+json toJson(const PowersetCeiling& p) { return json{{"exponent",p.exponent},{"exactDecimal",p.exactDecimal}}; }
+json toJson(const AutomatonMetrics& m) {
+    return json{{"rawStateCount",m.rawStateCount},{"reachableStateCount",m.reachableStateCount},
+        {"trimStateCount",m.trimStateCount},{"epsilonEdgeCount",m.epsilonEdgeCount},
+        {"consumingEdgeCount",m.consumingEdgeCount},{"totalTransitionCount",m.totalTransitionCount},
+        {"alphabetSize",m.alphabetSize}};
+}
+json toJson(const BoundResult& b) {
+    if (b.status == BoundStatus::NotComputed) return json{{"status","not-computed"},{"reason",b.reason}};
+    return json{{"status","computed"},{"representation",b.representation},{"method",b.method},{"value",b.value}};
+}
+json toJson(const GrowthAnalysis& g) {
+    return json{{"nfaMetrics",toJson(g.nfaMetrics)},{"subsetTrace",toJson(g.subsetTrace)},
+        {"reachableSubsetStateCount",g.reachableSubsetStateCount},{"minimizedStateCount",g.minimizedStateCount},
+        {"powersetCeiling",toJson(g.powersetCeiling)},{"bound",toJson(g.bound)}};
+}
+json toJson(const EquivalenceWitness& w) {
+    return json{{"word",w.word},{"isEmpty",w.isEmpty},{"baselineAccepts",w.baselineAccepts},{"candidateAccepts",w.candidateAccepts}};
+}
+json toJson(const EquivalenceResult& e) {
+    if (e.status == EquivalenceStatus::Equivalent) return json{{"status","equivalent"}};
+    if (e.status == EquivalenceStatus::Different) return json{{"status","different"},{"witness",toJson(e.witness)}};
+    return json{{"status","inconclusive"},{"reason",e.reason}};
+}
+json toJson(const CandidateResult& c) {
+    return json{{"nfa",toJson(c.nfa)},{"metrics",toJson(c.metrics)},{"equivalence",toJson(c.equivalence)}};
+}
 }
 std::string runPipelineJson(const std::string& pattern,const std::string& input) { return toJson(runPipeline(pattern,input)).dump(); }
+
+std::string runGrowthAnalysisJson(const std::string& pattern) {
+    ParseResult parsed = parse(pattern);
+    json j;
+    if (!parsed.ok) { j["ok"]=false; j["error"]=toJson(parsed.error); return j.dump(); }
+    Automaton nfa = thompsonConstruction(parsed.ast);
+    j["ok"]=true; j["analysis"]=toJson(computeGrowthAnalysis(nfa));
+    return j.dump();
+}
+
+std::string verifyCandidateJson(const std::string& pattern, int edgeSource, int edgeTarget) {
+    ParseResult parsed = parse(pattern);
+    json j;
+    if (!parsed.ok) { j["ok"]=false; j["error"]=toJson(parsed.error); return j.dump(); }
+    Automaton nfa = thompsonConstruction(parsed.ast);
+    CandidateEdit edit{CandidateEditKind::DeleteEpsilonEdge, CandidateEdgeId{edgeSource, "eps", edgeTarget}, {}};
+    j["ok"]=true; j["candidate"]=toJson(verifyCandidate(nfa, edit));
+    return j.dump();
+}
+
+std::string verifyCandidateEdgesJson(const std::string& pattern, const std::string& edgesJson) {
+    ParseResult parsed = parse(pattern);
+    if (!parsed.ok) return json{{"ok", false}, {"error", toJson(parsed.error)}}.dump();
+
+    Automaton nfa = thompsonConstruction(parsed.ast);
+    json requested;
+    try {
+        requested = json::parse(edgesJson);
+    } catch (const json::exception&) {
+        return json{{"ok", false}, {"error", {
+            {"type", "InvalidCandidateEdit"},
+            {"message", "The selected edge list is not valid JSON."}
+        }}}.dump();
+    }
+
+    if (!requested.is_array() || requested.empty()) {
+        return json{{"ok", false}, {"error", {
+            {"type", "InvalidCandidateEdit"},
+            {"message", "Select at least one epsilon edge to verify."}
+        }}}.dump();
+    }
+
+    const std::vector<CandidateEdgeId> eligible = listEligibleEpsilonEdges(nfa);
+    std::set<std::pair<int, int>> allowed;
+    for (const CandidateEdgeId& edge : eligible) allowed.emplace(edge.source, edge.target);
+
+    std::set<std::pair<int, int>> seen;
+    std::vector<CandidateEdgeId> edges;
+    for (const json& item : requested) {
+        if (!item.is_object() || !item.contains("source") || !item.contains("target") ||
+            !item["source"].is_number_integer() || !item["target"].is_number_integer()) {
+            return json{{"ok", false}, {"error", {
+                {"type", "InvalidCandidateEdit"},
+                {"message", "Each selected edge must include integer source and target state ids."}
+            }}}.dump();
+        }
+        if (item.contains("symbol") && (!item["symbol"].is_string() || item["symbol"] != "eps")) {
+            return json{{"ok", false}, {"error", {
+                {"type", "InvalidCandidateEdit"},
+                {"message", "Only epsilon edges can be deleted in this analysis."}
+            }}}.dump();
+        }
+
+        const int source = item["source"].get<int>();
+        const int target = item["target"].get<int>();
+        const std::pair<int, int> key{source, target};
+        if (!allowed.count(key)) {
+            return json{{"ok", false}, {"error", {
+                {"type", "InvalidCandidateEdit"},
+                {"message", "A selected epsilon edge does not exist in the baseline NFA."}
+            }}}.dump();
+        }
+        if (!seen.insert(key).second) {
+            return json{{"ok", false}, {"error", {
+                {"type", "InvalidCandidateEdit"},
+                {"message", "The same epsilon edge was selected more than once."}
+            }}}.dump();
+        }
+        edges.push_back(CandidateEdgeId{source, "eps", target});
+    }
+
+    CandidateEdit edit;
+    edit.kind = CandidateEditKind::DeleteEpsilonEdges;
+    edit.edges = std::move(edges);
+    return json{{"ok", true}, {"candidate", toJson(verifyCandidate(nfa, edit))}}.dump();
+}
 }

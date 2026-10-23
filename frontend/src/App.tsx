@@ -4,6 +4,7 @@ import { PatternInput } from "./components/PatternInput";
 import { AutomatonView } from "./components/AutomatonView";
 import { PlaybackControls } from "./components/PlaybackControls";
 import { TestStringStrip } from "./components/TestStringStrip";
+import { GrowthPanel } from "./components/GrowthPanel";
 import { useRegexEngine } from "./hooks/useRegexEngine";
 import type { PipelineSnapshot, Stage } from "./types/engine";
 import { computeInputPlaybackSteps, computeAstSteps, PLAYBACK_MAX_CHARS, type Step } from "./lib/steps";
@@ -12,7 +13,7 @@ import { clampStepIndex } from "./lib/playbackIndex";
 const DEBOUNCE_MS = 150;
 
 function App() {
-  const { state, runPipeline } = useRegexEngine();
+  const { state, runPipeline, runGrowthAnalysis, verifyCandidateEdges } = useRegexEngine();
   const [pattern, setPattern] = useState("(a|b)*ab");
   const [input, setInput] = useState("aab");
   const [snapshot, setSnapshot] = useState<PipelineSnapshot | null>(null);
@@ -157,6 +158,12 @@ function App() {
             Result: <strong>{snapshot.trace.result}</strong>
             {snapshot.trace.failurePosition !== null && ` (failed at position ${snapshot.trace.failurePosition})`}
           </p>
+          <GrowthPanel
+            pattern={pattern}
+            nfa={snapshot.nfa}
+            runGrowthAnalysis={runGrowthAnalysis}
+            verifyCandidate={(currentPattern, edges) => verifyCandidateEdges(currentPattern, JSON.stringify(edges))}
+          />
         </>
       )}
     </div>
