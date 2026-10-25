@@ -165,3 +165,100 @@ The regular-expression operators remain aligned with the Thompson construction: 
 - WASM probes: scripts/check-wasm-limits.mjs
 - Dead-state UI test: frontend/src/App.dead-state.test.tsx
 - Search UI test: frontend/src/components/BoundedOptimizationExplorer.test.tsx
+
+## 11. Fresh validation snapshot from this chat (25 October 2026)
+
+The following results were observed during this chat. They are a separate run snapshot; the earlier figures in Section 7 have been preserved as written.
+
+| Check | Observed result | Run details |
+|---|---|---|
+| Vitest, main checkout only | **203 tests passed across 18 files; 0 failed** | Ran `npm test -- --exclude "**/.work-*/**"` to avoid counting four local worktree snapshots as duplicate project suites. |
+| Native C++ suite | **77 test cases passed; 4,864 assertions passed** | `ctest --test-dir build --output-on-failure` reported 77/77; the Catch2 compact summary reported 4,864 assertions. This used the existing `build/engine_tests` binary. |
+| TypeScript typecheck | **Passed** | `npm run typecheck`. |
+| Frontend production build | **Passed** | `npm --prefix frontend run build`. |
+| Built-WASM resource probes | **27/27 passed; 0 failed** | `node scripts/check-wasm-limits.mjs build-wasm/regexlab.js`, using the module already present in `build-wasm`. |
+
+The native C++ executable and WASM module were not freshly rebuilt in this snapshot. A C++ rebuild was stopped when the project-folder change was requested, so the C++ and WASM figures above describe the binaries that were present when checked; rebuild them before presenting those two results as verified against a later source revision.
+
+### Main-checkout Vitest coverage breakdown
+
+| Coverage area | Test cases |
+|---|---:|
+| Parser, extended grammar, and shared parser-parity fixtures | 104 |
+| Thompson, subset construction, minimization, and matcher passes | 28 |
+| Growth analysis | 15 |
+| Differential checks (including at least 2,000 generated pattern/input comparisons) | 2 |
+| Frontend playback, layout, growth-panel, input-strip, and dead-state UI | 54 |
+| **Total** | **203** |
+
+A plain `npm test` also discovered the four `.work-*` snapshots in the repository root and reported 964 passing cases across 81 files. Those extra runs are duplicate snapshots and are not included in the 203-test main-checkout total.
+
+### WASM probe breakdown observed in this chat
+
+| Probe group | Checks | Result |
+|---|---:|---|
+| Acceptance and parse-error examples | 3 | 3 passed |
+| Pattern-length boundary cases | 8 | 8 passed |
+| Nested-plus NFA expansion guard | 2 | 2 passed |
+| Deep-group handling | 5 | 5 passed |
+| Non-ASCII pattern/input handling | 5 | 5 passed |
+| ASCII and length-boundary parity cases | 4 | 4 passed |
+| **Total** | **27** | **27 passed; 0 failed** |
+
+### Frontend build output observed in this chat
+
+| Asset | Uncompressed | Gzipped |
+|---|---:|---:|
+| JavaScript bundle | 263.84 kB | 82.01 kB |
+| CSS bundle | 18.46 kB | 4.23 kB |
+
+These are build-output sizes, not runtime or performance measurements.
+
+## 12. Commit-level implementation changes summarized for the report
+
+The current repository HEAD observed in this chat was `53a9750` (`feat: add bounded NFA optimization and safety limits`). Its recorded change summary covered **70 files**, with **4,279 insertions** and **685 deletions**. The major implementation areas are:
+
+| Area | Change and report relevance |
+|---|---|
+| Extended regular-expression grammar | Added and exercised plus, optional, and symbolic character-class support across the parser and automata pipeline. Character classes remain symbolic consuming relations rather than being expanded into one edge per character. |
+| Thompson construction | Added construction paths for the extended operators and safeguards that estimate expansion before allocating an oversized NFA. |
+| Bounded Optimization Explorer | Added deterministic enumeration of single-edge and grouped epsilon-edge deletions, explicit search limits, language-equivalence checks, candidate metrics, and a verified Pareto frontier. |
+| Equivalence evidence | Reuses the equivalence checker and provides a shortest distinguishing input for a language-changing candidate. A budget-limited check remains inconclusive rather than being treated as equivalent. |
+| Resource limits | Added bounded work/state handling for parsing, Thompson expansion, subset construction, minimization, and traced growth analysis; failure is returned as a structured complexity result rather than partial output. |
+| Growth and automaton visualization | Added structural counts and construction traces, improved NFA fragment/transition layout, and kept symbolic character-class edges legible. |
+| Failed-input playback | Added a rejecting sink for missing DFA/minimized-DFA transitions and failed-character highlighting; NFA playback does not invent a sink state. |
+| Frontend and regression coverage | Added the bounded-search interface and tests for search-result presentation, growth controls, playback, layouts, and dead-state behavior, alongside C++/TypeScript parity coverage. |
+| Project materials | Updated project/review materials and added compiler-design notes and presentation content. |
+
+## 13. Existing figures that need a decision before reconciliation
+
+No earlier content or figures in this file have been edited or removed. The new run differs from the figures already in Section 7: that section says Vitest **209 tests / 20 files** and C++ **81 cases / 4,923 assertions**, while the main-checkout run observed here says Vitest **203 / 18** and the existing C++ binary **77 / 4,864**. The C++ and WASM binaries were not rebuilt during this chat, so those values also need a fresh build before they can be used as the definitive source-current totals.
+
+## 14. Earlier Phase A documentation PR recorded in this conversation (20 October 2026)
+
+This is a historical record of documentation work from PR #57, separate from the implementation and validation snapshots in Sections 1-13. The PR's state may have changed since it was created. This documentation-only change did not produce new engine test results or performance measurements.
+
+| Item | Recorded value | Meaning |
+|---|---|---|
+| Pull request | [#57](https://github.com/Vignesh-P-C/regexlab/pull/57) | `docs: freeze contracts and document WASM build` |
+| Branch | `docs/phase-a-contracts-wasm` | Separate documentation branch |
+| Commits | 2 | Contract freeze and WASM guide were kept in separate commits. |
+| Files changed | 8 | Total across both commits. |
+| Diff size | 277 insertions, 41 deletions | Git change counts; not tests or benchmark values. |
+
+| Commit | Files changed | Insertions / deletions | Content |
+|---|---:|---:|---|
+| `0fd91fe` - `docs: freeze shared data contracts (v1)` | 5 | 180 / 4 | Added the AST, Automaton, MatchTrace, ParseError, and pipeline JSON contract; linked the source of truth from TS, C++, and frontend type comments. |
+| `d259825` - `docs: document WASM build and frontend integration` | 3 | 97 / 37 | Added the Emscripten setup/build/copy/run guide and updated README and CLAUDE.md project context. |
+
+### PR #57 validation record
+
+| Check | Result | What was checked |
+|---|---|---|
+| Documentation/source consistency | Reviewed | Target, output names, and Emscripten flags against `CMakeLists.txt`; JSON fields against the bridge; frontend loading path against its loader and types. |
+| Whitespace/diff check | Passed | `git diff origin/main --check` returned clean. |
+| Build and automated tests | Not run | The PR changed documentation and source comments only; no new test result is claimed here. |
+| Independent WASM cold build | Pending at PR creation | The PR asked Ujwal to follow the guide on his machine for issue #17. |
+| Explain-it-back session | Separate follow-up | Issue #18 requires a live walkthrough and was not completed by the documentation PR. |
+
+The PR also recorded the decision to defer optional issue #45 for the current project scope. No engine implementation or test result for #45 is claimed.
