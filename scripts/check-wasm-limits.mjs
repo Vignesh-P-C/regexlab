@@ -30,6 +30,31 @@ if (process.argv[2] === "--child") {
     process.exit(3);
   }
 }
+if (process.argv[2] === "--search-child") {
+  const [, , , jsPath, pattern64, maxEditDepth, maxCandidates] = process.argv;
+  const pattern = Buffer.from(pattern64, "base64").toString("utf8");
+  const { default: Module } = await import(pathToFileURL(jsPath).href);
+  const m = await Module();
+  try {
+    const r = JSON.parse(m.runBoundedOptimization(pattern, Number(maxEditDepth), Number(maxCandidates)));
+    if (!r.ok) {
+      console.log(`ERROR ${r.error.type}@${r.error.position}`);
+      process.exit(3);
+    }
+    const search = r.search;
+    console.log(
+      "ok evaluated=" + search.evaluatedCandidateCount +
+      " equivalent=" + search.equivalentCandidateCount +
+      " different=" + search.differentCandidateCount +
+      " inconclusive=" + search.inconclusiveCandidateCount,
+    );
+    process.exit(0);
+  } catch (e) {
+    console.log("THREW " + (e && e.message ? e.message : typeof e));
+    process.exit(3);
+  }
+}
+
 
 // ---- parent mode ----
 // probe() sends the pattern base64-encoded as one argv entry; keep raw
@@ -44,6 +69,25 @@ function probe(pattern, input = "a") {
   // to ETIMEDOUT. Any other res.error (e.g. E2BIG from an oversized argv)
   // means the child never ran at all -- that's a harness problem, not an
   // engine hang, so it gets its own label instead of being lumped in here.
+  if (res.error && res.error.code === "ETIMEDOUT") return { handled: false, text: "TIMEOUT/HANG" };
+  if (res.error) return { handled: false, text: `HARNESS ERROR: ${res.error.code}` };
+  if (res.status === null) return { handled: false, text: "TIMEOUT/HANG" };
+  return { handled: res.status === 0, text: (res.stdout || "").trim() };
+}
+
+function probeBoundedSearch(pattern, maxEditDepth = 2, maxCandidates = 24) {
+  const res = spawnSync(
+    process.execPath,
+    [
+      new URL(import.meta.url).pathname,
+      "--search-child",
+      wasmJs,
+      Buffer.from(pattern, "utf8").toString("base64"),
+      String(maxEditDepth),
+      String(maxCandidates),
+    ],
+    { encoding: "utf8", timeout: 10_000 },
+  );
   if (res.error && res.error.code === "ETIMEDOUT") return { handled: false, text: "TIMEOUT/HANG" };
   if (res.error) return { handled: false, text: `HARNESS ERROR: ${res.error.code}` };
   if (res.status === null) return { handled: false, text: "TIMEOUT/HANG" };
@@ -130,6 +174,14 @@ checkTimed("dot x500 (500 chars, at the cap)", ".".repeat(500), "a", "ok", 2000)
 checkTimed("shorthand-w x250 (500 chars, at the cap)", "\\w".repeat(250), "a", "ok", 1000);
 checkTimed("negclass x125 (500 chars, at the cap)", "[^a]".repeat(125), "a", "ok", 1000);
 checkTimed("mixed .*a\\w*b", ".*a\\w*b", "xxaab", "ok match", 500);
+
+console.log("\n-- B: bounded optimization WASM contract --");
+{
+  const { handled, text } = probeBoundedSearch("a|a", 2, 24);
+  const pass = handled && text === "ok evaluated=10 equivalent=6 different=4 inconclusive=0";
+  rows.push({ label: "bounded search on a|a", text, pass });
+  console.log(`${pass ? "PASS" : "FAIL"}  bounded search on a|a          ${text}`);
+}
 
 const failed = rows.filter((r) => !r.pass);
 console.log(`\n${rows.length - failed.length}/${rows.length} passed`);

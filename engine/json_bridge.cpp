@@ -4,6 +4,7 @@
 #include <variant>
 #include <set>
 #include "regexlab/candidate.hpp"
+#include "regexlab/bounded-optimization.hpp"
 #include "regexlab/pipeline.hpp"
 #include "regexlab/growth-analysis.hpp"
 #include "regexlab/passes/parser-pass.hpp"
@@ -84,6 +85,41 @@ json toJson(const EquivalenceResult& e) {
 }
 json toJson(const CandidateResult& c) {
     return json{{"nfa",toJson(c.nfa)},{"metrics",toJson(c.metrics)},{"equivalence",toJson(c.equivalence)}};
+}
+json toJson(const CandidateEdgeId& e) {
+    return json{{"source",e.source},{"symbol",e.symbol},{"target",e.target}};
+}
+json toJson(const BoundedSearchLimits& l) {
+    return json{{"maxEligibleEdges",l.maxEligibleEdges},{"maxEditDepth",l.maxEditDepth},
+        {"maxCandidates",l.maxCandidates},{"maxDfaStates",l.maxDfaStates},
+        {"maxWorkUnitsPerCheck",l.maxWorkUnitsPerCheck},{"maxProductStatePairs",l.maxProductStatePairs}};
+}
+json toJson(const BoundedAutomatonMetrics& m) {
+    return json{{"nfa",toJson(m.nfa)},
+        {"reachableSubsetStateCount",m.reachableSubsetStateCount ? json(*m.reachableSubsetStateCount) : json(nullptr)},
+        {"minimizedStateCount",m.minimizedStateCount ? json(*m.minimizedStateCount) : json(nullptr)},
+        {"subsetAnalysisReason",m.subsetAnalysisReason.empty() ? json(nullptr) : json(m.subsetAnalysisReason)},
+        {"minimizationReason",m.minimizationReason.empty() ? json(nullptr) : json(m.minimizationReason)}};
+}
+json toJson(const BoundedOptimizationCandidate& c) {
+    json edits = json::array();
+    for (const auto& edge : c.edits) edits.push_back(toJson(edge));
+    return json{{"id",c.id},{"edits",edits},{"nfa",toJson(c.nfa)},
+        {"metrics",toJson(c.metrics)},{"equivalence",toJson(c.equivalence)},
+        {"minimizedStateCountMatchesBaseline",c.minimizedStateCountMatchesBaseline
+            ? json(*c.minimizedStateCountMatchesBaseline) : json(nullptr)}};
+}
+json toJson(const BoundedOptimizationResult& r) {
+    json candidates = json::array();
+    for (const auto& candidate : r.candidates) candidates.push_back(toJson(candidate));
+    return json{{"limits",toJson(r.limits)},
+        {"totalEligibleEdgeCount",r.totalEligibleEdgeCount},{"consideredEdgeCount",r.consideredEdgeCount},
+        {"searchSpaceCandidateCount",r.searchSpaceCandidateCount},{"generatedCandidateCount",r.generatedCandidateCount},
+        {"evaluatedCandidateCount",r.evaluatedCandidateCount},{"equivalentCandidateCount",r.equivalentCandidateCount},
+        {"differentCandidateCount",r.differentCandidateCount},{"inconclusiveCandidateCount",r.inconclusiveCandidateCount},
+        {"duplicateAutomataSkipped",r.duplicateAutomataSkipped},{"stopReasons",r.stopReasons},
+        {"baselineMetrics",toJson(r.baselineMetrics)},{"candidates",candidates},
+        {"paretoFrontierIds",r.paretoFrontierIds}};
 }
 }
 std::string runPipelineJson(const std::string& pattern,const std::string& input) { return toJson(runPipeline(pattern,input)).dump(); }
@@ -172,5 +208,16 @@ std::string verifyCandidateEdgesJson(const std::string& pattern, const std::stri
     edit.kind = CandidateEditKind::DeleteEpsilonEdges;
     edit.edges = std::move(edges);
     return json{{"ok", true}, {"candidate", toJson(verifyCandidate(nfa, edit))}}.dump();
+}
+
+std::string runBoundedOptimizationJson(const std::string& pattern, int maxEditDepth, int maxCandidates) {
+    ParseResult parsed = parse(pattern);
+    if (!parsed.ok) return json{{"ok", false}, {"error", toJson(parsed.error)}}.dump();
+
+    Automaton nfa = thompsonConstruction(parsed.ast);
+    BoundedSearchLimits limits;
+    if (maxEditDepth > 0) limits.maxEditDepth = static_cast<std::size_t>(maxEditDepth);
+    if (maxCandidates > 0) limits.maxCandidates = static_cast<std::size_t>(maxCandidates);
+    return json{{"ok", true}, {"search", toJson(searchBoundedEpsilonDeletions(nfa, limits))}}.dump();
 }
 }

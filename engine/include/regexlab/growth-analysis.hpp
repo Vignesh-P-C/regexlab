@@ -12,7 +12,9 @@ namespace regexlab {
 
 GrowthAnalysis computeGrowthAnalysis(const Automaton& nfa);
 
-CandidateResult verifyCandidate(const Automaton& baselineNfa, const CandidateEdit& edit,
-                                 int budget = kDefaultEquivalenceBudget);
+CandidateResult verifyCandidate(
+    const Automaton& baselineNfa, const CandidateEdit& edit,
+    int budget = kDefaultEquivalenceBudget,
+    SubsetConstructionLimits subsetLimits = {});
 
 }  // namespace regexlab

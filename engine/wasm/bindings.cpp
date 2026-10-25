@@ -30,4 +30,5 @@ EMSCRIPTEN_BINDINGS(regexlab_module) {
     emscripten::function("runGrowthAnalysis", &regexlab::runGrowthAnalysisJson);
     emscripten::function("verifyCandidate", &regexlab::verifyCandidateJson);
     emscripten::function("verifyCandidateEdges", &regexlab::verifyCandidateEdgesJson);
+    emscripten::function("runBoundedOptimization", &regexlab::runBoundedOptimizationJson);
 }

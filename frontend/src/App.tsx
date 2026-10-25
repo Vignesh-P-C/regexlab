@@ -13,7 +13,7 @@ import { clampStepIndex } from "./lib/playbackIndex";
 const DEBOUNCE_MS = 150;
 
 function App() {
-  const { state, runPipeline, runGrowthAnalysis, verifyCandidateEdges } = useRegexEngine();
+  const { state, runPipeline, runGrowthAnalysis, verifyCandidateEdges, runBoundedOptimization } = useRegexEngine();
   const [pattern, setPattern] = useState("(a|b)*ab");
   const [input, setInput] = useState("aab");
   const [snapshot, setSnapshot] = useState<PipelineSnapshot | null>(null);
@@ -163,6 +163,7 @@ function App() {
             nfa={snapshot.nfa}
             runGrowthAnalysis={runGrowthAnalysis}
             verifyCandidate={(currentPattern, edges) => verifyCandidateEdges(currentPattern, JSON.stringify(edges))}
+            runBoundedOptimization={runBoundedOptimization}
           />
         </>
       )}

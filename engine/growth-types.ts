@@ -100,3 +100,55 @@ export type CandidateResult = {
   metrics: AutomatonMetrics;
   equivalence: EquivalenceResult;
 };
+
+
+/** Fixed engine work limits, plus the two learner-adjustable search limits. */
+export type BoundedSearchLimits = {
+  maxEligibleEdges: number;
+  maxEditDepth: number;
+  maxCandidates: number;
+  maxDfaStates: number;
+  maxWorkUnitsPerCheck: number;
+  maxProductStatePairs: number;
+};
+
+/** A metric bundle whose DFA measurements can be absent when determinization is capped. */
+export type BoundedAutomatonMetrics = {
+  nfa: AutomatonMetrics;
+  reachableSubsetStateCount: number | null;
+  minimizedStateCount: number | null;
+  subsetAnalysisReason: string | null;
+  minimizationReason: string | null;
+};
+
+export type BoundedOptimizationCandidate = {
+  id: string;
+  edits: CandidateEdgeId[];
+  nfa: Automaton;
+  metrics: BoundedAutomatonMetrics;
+  equivalence: EquivalenceResult;
+  minimizedStateCountMatchesBaseline: boolean | null;
+};
+
+export type BoundedOptimizationStopReason =
+  | "eligible-edge-limit"
+  | "candidate-limit"
+  | "baseline-inconclusive";
+
+export type BoundedOptimizationResult = {
+  limits: BoundedSearchLimits;
+  totalEligibleEdgeCount: number;
+  consideredEdgeCount: number;
+  searchSpaceCandidateCount: number;
+  generatedCandidateCount: number;
+  evaluatedCandidateCount: number;
+  equivalentCandidateCount: number;
+  differentCandidateCount: number;
+  inconclusiveCandidateCount: number;
+  duplicateAutomataSkipped: number;
+  stopReasons: BoundedOptimizationStopReason[];
+  baselineMetrics: BoundedAutomatonMetrics;
+  candidates: BoundedOptimizationCandidate[];
+  /** Includes "baseline" as the reference machine when it is non-dominated. */
+  paretoFrontierIds: string[];
+};

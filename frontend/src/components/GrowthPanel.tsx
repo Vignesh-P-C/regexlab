@@ -1,12 +1,24 @@
 import { useState } from "react";
-import type { Automaton, CandidateEdgeId, CandidateResponse, GrowthAnalysisResult } from "../types/engine";
+import type {
+  Automaton,
+  BoundedOptimizationResponse,
+  CandidateEdgeId,
+  CandidateResponse,
+  GrowthAnalysisResult,
+} from "../types/engine";
 import { listEligibleEpsilonEdges } from "../lib/growth";
+import { BoundedOptimizationExplorer } from "./BoundedOptimizationExplorer";
 
 type Props = {
   pattern: string;
   nfa: Automaton;
   runGrowthAnalysis: (pattern: string) => GrowthAnalysisResult | null;
   verifyCandidate: (pattern: string, edges: CandidateEdgeId[]) => CandidateResponse | null;
+  runBoundedOptimization: (
+    pattern: string,
+    maxEditDepth: number,
+    maxCandidates: number,
+  ) => BoundedOptimizationResponse | null;
 };
 
 function edgeKey(edge: CandidateEdgeId): string {
@@ -20,7 +32,7 @@ function powersetLabel(exactDecimal: string): string {
   return "exact value has " + exactDecimal.length + " digits";
 }
 
-export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }: Props) {
+export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate, runBoundedOptimization }: Props) {
   const [open, setOpen] = useState(false);
   const [analysis, setAnalysis] = useState<GrowthAnalysisResult | null>(null);
   const [analysisPattern, setAnalysisPattern] = useState<string | null>(null);
@@ -49,7 +61,7 @@ export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }
 
   function toggleEdge(edge: CandidateEdgeId) {
     const key = edgeKey(edge);
-    const next = new Set(selectedEdgeKeys);
+    const next = new Set<string>(selectedEdgeKeys);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     updateSelection(next);
@@ -294,6 +306,12 @@ export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }
               </>
             )}
           </section>
+
+          <BoundedOptimizationExplorer
+            pattern={pattern}
+            baselineNfa={nfa}
+            runBoundedOptimization={runBoundedOptimization}
+          />
         </>
       )}
     </section>

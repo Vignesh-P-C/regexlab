@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { CandidateResponse, GrowthAnalysisResult, PipelineSnapshot } from "../types/engine";
+import type {
+  BoundedOptimizationResponse,
+  CandidateResponse,
+  GrowthAnalysisResult,
+  PipelineSnapshot,
+} from "../types/engine";
 
 type RegexLabModule = {
   runPipeline: (pattern: string, input: string) => string;
@@ -9,6 +14,7 @@ type RegexLabModule = {
   runGrowthAnalysis: (pattern: string) => string;
   verifyCandidate: (pattern: string, edgeSource: number, edgeTarget: number) => string;
   verifyCandidateEdges: (pattern: string, edgesJson: string) => string;
+  runBoundedOptimization: (pattern: string, maxEditDepth: number, maxCandidates: number) => string;
 };
 
 type RegexLabModuleFactory = (opts?: {
@@ -103,5 +109,16 @@ export function useRegexEngine() {
     return JSON.parse(moduleRef.current.verifyCandidateEdges(pattern, edgesJson)) as CandidateResponse;
   }
 
-  return { state, runPipeline, runGrowthAnalysis, verifyCandidate, verifyCandidateEdges };
+  function runBoundedOptimization(
+    pattern: string,
+    maxEditDepth: number,
+    maxCandidates: number,
+  ): BoundedOptimizationResponse | null {
+    if (!moduleRef.current) return null;
+    return JSON.parse(
+      moduleRef.current.runBoundedOptimization(pattern, maxEditDepth, maxCandidates),
+    ) as BoundedOptimizationResponse;
+  }
+
+  return { state, runPipeline, runGrowthAnalysis, verifyCandidate, verifyCandidateEdges, runBoundedOptimization };
 }

@@ -4,6 +4,7 @@
 // header comment for the full rationale; these are the same additive
 // contracts, kept parallel field-for-field.
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -107,6 +108,50 @@ struct CandidateResult {
     Automaton nfa;
     AutomatonMetrics metrics;
     EquivalenceResult equivalence;
+};
+
+
+struct BoundedSearchLimits {
+    std::size_t maxEligibleEdges = 12;
+    std::size_t maxEditDepth = 2;
+    std::size_t maxCandidates = 24;
+    std::size_t maxDfaStates = 128;
+    std::size_t maxWorkUnitsPerCheck = 100000;
+    std::size_t maxProductStatePairs = 10000;
+};
+
+struct BoundedAutomatonMetrics {
+    AutomatonMetrics nfa;
+    std::optional<int> reachableSubsetStateCount;
+    std::optional<int> minimizedStateCount;
+    std::string subsetAnalysisReason;
+    std::string minimizationReason;
+};
+
+struct BoundedOptimizationCandidate {
+    std::string id;
+    std::vector<CandidateEdgeId> edits;
+    Automaton nfa;
+    BoundedAutomatonMetrics metrics;
+    EquivalenceResult equivalence;
+    std::optional<bool> minimizedStateCountMatchesBaseline;
+};
+
+struct BoundedOptimizationResult {
+    BoundedSearchLimits limits;
+    std::size_t totalEligibleEdgeCount = 0;
+    std::size_t consideredEdgeCount = 0;
+    std::size_t searchSpaceCandidateCount = 0;
+    std::size_t generatedCandidateCount = 0;
+    std::size_t evaluatedCandidateCount = 0;
+    std::size_t equivalentCandidateCount = 0;
+    std::size_t differentCandidateCount = 0;
+    std::size_t inconclusiveCandidateCount = 0;
+    std::size_t duplicateAutomataSkipped = 0;
+    std::vector<std::string> stopReasons;
+    BoundedAutomatonMetrics baselineMetrics;
+    std::vector<BoundedOptimizationCandidate> candidates;
+    std::vector<std::string> paretoFrontierIds;
 };
 
 }  // namespace regexlab

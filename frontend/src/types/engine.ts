@@ -64,3 +64,40 @@ export type CandidateResult = { nfa: Automaton; metrics: AutomatonMetrics; equiv
 export type CandidateResponse =
   | { ok: true; candidate: CandidateResult }
   | { ok: false; error: ParseError | CandidateEditError };
+
+export type BoundedSearchLimits = {
+  maxEligibleEdges: number; maxEditDepth: number; maxCandidates: number;
+  maxDfaStates: number; maxWorkUnitsPerCheck: number; maxProductStatePairs: number;
+};
+export type BoundedAutomatonMetrics = {
+  nfa: AutomatonMetrics;
+  reachableSubsetStateCount: number | null;
+  minimizedStateCount: number | null;
+  subsetAnalysisReason: string | null;
+  minimizationReason: string | null;
+};
+export type BoundedOptimizationCandidate = {
+  id: string;
+  edits: { source: number; symbol: "eps"; target: number }[];
+  nfa: Automaton;
+  metrics: BoundedAutomatonMetrics;
+  equivalence: EquivalenceResult;
+  minimizedStateCountMatchesBaseline: boolean | null;
+};
+export type BoundedOptimizationStopReason =
+  | "eligible-edge-limit" | "candidate-limit" | "baseline-inconclusive";
+export type BoundedOptimizationResult = {
+  limits: BoundedSearchLimits;
+  totalEligibleEdgeCount: number; consideredEdgeCount: number;
+  searchSpaceCandidateCount: number; generatedCandidateCount: number;
+  evaluatedCandidateCount: number; equivalentCandidateCount: number;
+  differentCandidateCount: number; inconclusiveCandidateCount: number;
+  duplicateAutomataSkipped: number;
+  stopReasons: BoundedOptimizationStopReason[];
+  baselineMetrics: BoundedAutomatonMetrics;
+  candidates: BoundedOptimizationCandidate[];
+  paretoFrontierIds: string[];
+};
+export type BoundedOptimizationResponse =
+  | { ok: true; search: BoundedOptimizationResult }
+  | { ok: false; error: ParseError };

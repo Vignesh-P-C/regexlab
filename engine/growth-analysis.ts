@@ -10,7 +10,11 @@
 import type { Automaton } from "./types.js";
 import type { CandidateEdit, CandidateResult, GrowthAnalysis } from "./growth-types.js";
 import { computeAutomatonMetrics, computePowersetCeiling } from "./automaton-metrics.js";
-import { subsetConstructionTraced } from "./passes/subset-construction-pass.js";
+import {
+  DEFAULT_SUBSET_CONSTRUCTION_LIMITS,
+  subsetConstructionTraced,
+  type SubsetConstructionLimits,
+} from "./passes/subset-construction-pass.js";
 import { minimize } from "./passes/minimization-pass.js";
 import { applyCandidateEdit } from "./candidate.js";
 import { checkEquivalence, DEFAULT_EQUIVALENCE_BUDGET } from "./equivalence.js";
@@ -57,10 +61,11 @@ export function verifyCandidate(
   baselineNfa: Automaton,
   edit: CandidateEdit,
   budget: number = DEFAULT_EQUIVALENCE_BUDGET,
+  subsetLimits: SubsetConstructionLimits = DEFAULT_SUBSET_CONSTRUCTION_LIMITS,
 ): CandidateResult {
   const candidateNfa = applyCandidateEdit(baselineNfa, edit);
   const metrics = computeAutomatonMetrics(candidateNfa);
-  const equivalence = checkEquivalence(baselineNfa, candidateNfa, budget);
+  const equivalence = checkEquivalence(baselineNfa, candidateNfa, budget, subsetLimits);
 
   return {
     edits: [edit],

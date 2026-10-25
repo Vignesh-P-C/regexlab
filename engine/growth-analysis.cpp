@@ -35,14 +35,16 @@ GrowthAnalysis computeGrowthAnalysis(const Automaton& nfa) {
     return result;
 }
 
-CandidateResult verifyCandidate(const Automaton& baselineNfa, const CandidateEdit& edit, int budget) {
+CandidateResult verifyCandidate(
+    const Automaton& baselineNfa, const CandidateEdit& edit, int budget,
+    SubsetConstructionLimits subsetLimits) {
     Automaton candidateNfa = applyCandidateEdit(baselineNfa, edit);
 
     CandidateResult result;
     result.edits = {edit};
     result.nfa = candidateNfa;
     result.metrics = computeAutomatonMetrics(candidateNfa);
-    result.equivalence = checkEquivalence(baselineNfa, candidateNfa, budget);
+    result.equivalence = checkEquivalence(baselineNfa, candidateNfa, budget, subsetLimits);
     return result;
 }
 
