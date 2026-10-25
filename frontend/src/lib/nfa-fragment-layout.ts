@@ -34,12 +34,7 @@ class LayoutBuilder {
   }
 }
 
-function buildFragment(
-  node: ASTNode,
-  startLayer: number,
-  builder: LayoutBuilder,
-  inlineTerminalPlus = false,
-): Fragment {
+function buildFragment(node: ASTNode, startLayer: number, builder: LayoutBuilder, inlineTerminalPlus = false): Fragment {
   switch (node.kind) {
     case "char":
     case "charset": {
@@ -50,8 +45,10 @@ function buildFragment(
 
     case "concat": {
       const left = buildFragment(node.left, startLayer, builder, true);
-      const leftExitLayer = Math.max(...(left.inlineExitLayers ?? [left.exitLayer]));
-      const right = buildFragment(node.right, leftExitLayer + 1, builder, inlineTerminalPlus);
+      // A fused plus exit can originate at either the mandatory or repeated
+      // copy, so place the following fragment after the later of those ends.
+      const rightStartLayer = Math.max(...(left.inlineExitLayers ?? [left.exitLayer])) + 1;
+      const right = buildFragment(node.right, rightStartLayer, builder, inlineTerminalPlus);
       return {
         start: left.start,
         accept: right.accept,
@@ -62,8 +59,9 @@ function buildFragment(
     }
 
     case "alt": {
-      // Both branches split off the same entry layer; mirrors the pass's
-      // allocation order: left fragment, right fragment, then wrapper states.
+      // Both branches split off the same entry layer; mirrors
+      // thompson-pass.ts's allocation order: left fragment, then right
+      // fragment, THEN the new start/accept states (allocated last).
       const left = buildFragment(node.left, startLayer + 1, builder);
       const right = buildFragment(node.right, startLayer + 1, builder);
       const joinLayer = Math.max(left.exitLayer, right.exitLayer) + 1;
@@ -72,37 +70,32 @@ function buildFragment(
       return { start, accept, entryLayer: startLayer, exitLayer: joinLayer };
     }
 
+    case "star":
+    case "optional": {
+      // Preserve the original star/optional fragment layout.
+      const inner = buildFragment(node.child, startLayer + 1, builder);
+      const exitLayer = inner.exitLayer + 1;
+      const start = builder.newState(startLayer);
+      const accept = builder.newState(exitLayer);
+      return { start, accept, entryLayer: startLayer, exitLayer };
+    }
+
     case "plus": {
-      // Allocate the required copy first, then the repeatable copy. If a
-      // continuation exists, both accepting states connect directly to it.
+      // Plus is a mandatory copy followed by a repeating copy.
       const first = buildFragment(node.child, startLayer, builder);
       const repeated = buildFragment(node.child, first.exitLayer + 1, builder);
       if (inlineTerminalPlus) {
         return {
           start: first.start,
           accept: repeated.accept,
-          entryLayer: first.entryLayer,
+          entryLayer: startLayer,
           exitLayer: repeated.exitLayer,
           inlineExitLayers: [first.exitLayer, repeated.exitLayer],
         };
       }
-      const accept = builder.newState(repeated.exitLayer + 1);
-      return {
-        start: first.start,
-        accept,
-        entryLayer: first.entryLayer,
-        exitLayer: repeated.exitLayer + 1,
-      };
-    }
-
-    case "star":
-    case "optional": {
-      // Keep the existing textbook Thompson wrapper for star and optional.
-      const inner = buildFragment(node.child, startLayer + 1, builder);
-      const exitLayer = inner.exitLayer + 1;
-      const start = builder.newState(startLayer);
+      const exitLayer = repeated.exitLayer + 1;
       const accept = builder.newState(exitLayer);
-      return { start, accept, entryLayer: startLayer, exitLayer };
+      return { start: first.start, accept, entryLayer: startLayer, exitLayer };
     }
   }
 }

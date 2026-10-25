@@ -14,18 +14,18 @@
 
 namespace regexlab {
 
-/** SubsetConstructionPass entry point: NFA in, DFA out (same Automaton shape, no "eps" transitions). */
-Automaton subsetConstruction(const Automaton& nfa);
-
-/** Deterministic resource caps used by opt-in equivalence checks. */
+/** Deterministic state/work caps shared by ordinary and opt-in construction. */
 struct SubsetConstructionLimits {
     std::size_t maxDfaStates = 20000;
     std::size_t maxWorkUnits = 1000000;
 };
 
+/** SubsetConstructionPass entry point: NFA in, safety-bounded DFA out. */
+Automaton subsetConstruction(
+    const Automaton& nfa, const SubsetConstructionLimits& limits = {});
+
 /**
- * Bounded subset construction. Returns nullopt if either cap is exceeded;
- * the ordinary pipeline continues to use subsetConstruction() unchanged.
+ * Bounded subset construction. Returns nullopt if either cap is exceeded.
  */
 std::optional<Automaton> subsetConstructionBounded(
     const Automaton& nfa, const SubsetConstructionLimits& limits);
@@ -41,6 +41,8 @@ struct TracedSubsetConstruction {
     Automaton dfa;
     SubsetTrace trace;
 };
-TracedSubsetConstruction subsetConstructionTraced(const Automaton& nfa);
+TracedSubsetConstruction subsetConstructionTraced(
+    const Automaton& nfa, const SubsetConstructionLimits& limits = {},
+    std::size_t maxTraceSteps = 50000);
 
 }  // namespace regexlab

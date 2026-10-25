@@ -102,7 +102,7 @@ TEST_CASE("ThompsonPass — composition", "[thompson]") {
 }
 
 
-TEST_CASE("ThompsonPass — plus is mandatory followed by a repeating copy", "[thompson][extended]") {
+TEST_CASE("ThompsonPass - plus is mandatory followed by a repeating copy", "[thompson][extended]") {
     auto nfa = nfaFor("a+");
     REQUIRE(nfa.stateCount == 5);
     REQUIRE(nfa.startState == 0);
@@ -114,7 +114,7 @@ TEST_CASE("ThompsonPass — plus is mandatory followed by a repeating copy", "[t
     REQUIRE(flat.at(3).at("eps") == std::vector<int>{2, 4});
 }
 
-TEST_CASE("ThompsonPass — plus exits connect directly to the next fragment", "[thompson][extended]") {
+TEST_CASE("ThompsonPass - plus exits join directly into the following fragment", "[thompson][extended]") {
     auto nfa = nfaFor("a+bcd");
     REQUIRE(nfa.stateCount == 10);
     REQUIRE(nfa.startState == 0);
@@ -149,4 +149,23 @@ TEST_CASE("ThompsonPass — empty set has no unlabeled edge", "[thompson][extend
     const auto nfa = nfaFor(R"([^\x00-\x7f])");
     REQUIRE(nfa.stateCount == 2);
     REQUIRE(nfa.transitions.empty());
+}
+
+TEST_CASE("ThompsonPass nested plus is rejected before exponential allocation", "[thompson][limits]") {
+    std::string pattern = "a+";
+    for (int depth = 0; depth < 12; ++depth) pattern = "(" + pattern + ")+";
+    const ParseResult parsed = parse(pattern);
+    REQUIRE(parsed.ok);
+    REQUIRE_THROWS_AS(thompsonConstruction(parsed.ast), AutomatonTooComplexError);
+}
+
+TEST_CASE("ThompsonPass still accepts a maximum-length alternation below the NFA cap", "[thompson][limits]") {
+    std::string pattern;
+    for (int i = 0; i < 250; ++i) {
+        if (i > 0) pattern += "|";
+        pattern += "a";
+    }
+    const ParseResult parsed = parse(pattern);
+    REQUIRE(parsed.ok);
+    REQUIRE(thompsonConstruction(parsed.ast).stateCount == 998);
 }

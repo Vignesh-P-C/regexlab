@@ -15,8 +15,17 @@ using json = nlohmann::json;
 json toJson(const ParseError& e) {
     static const char* names[] = {"UnmatchedParen","UnexpectedToken","EmptyGroup","DanglingOperator","PatternTooComplex","InvalidCharacterClass","AutomatonTooComplex"};
     static_assert(sizeof(names)/sizeof(names[0]) == static_cast<size_t>(ParseErrorType::AutomatonTooComplex)+1, "error names must match ParseErrorType");
-    return json{{"type",names[static_cast<int>(e.type)]},{"position",e.position},
+    json result{{"type",names[static_cast<int>(e.type)]},{"position",e.position},
         {"expected",e.expected ? json(*e.expected) : json(nullptr)},{"found",e.found ? json(*e.found) : json(nullptr)}};
+    if (e.message) result["message"] = *e.message;
+    return result;
+}
+json complexityError(const AutomatonTooComplexError& error) {
+    return toJson(ParseError{ParseErrorType::AutomatonTooComplex, 0, std::nullopt,
+                             std::nullopt, std::string(error.what())});
+}
+std::string complexityFailure(const AutomatonTooComplexError& error) {
+    return json{{"ok", false}, {"error", complexityError(error)}}.dump();
 }
 json toJson(const ASTNodePtr& node) {
     return std::visit([&](auto&& n)->json {
@@ -128,26 +137,39 @@ std::string runGrowthAnalysisJson(const std::string& pattern) {
     ParseResult parsed = parse(pattern);
     json j;
     if (!parsed.ok) { j["ok"]=false; j["error"]=toJson(parsed.error); return j.dump(); }
-    Automaton nfa = thompsonConstruction(parsed.ast);
-    j["ok"]=true; j["analysis"]=toJson(computeGrowthAnalysis(nfa));
-    return j.dump();
+    try {
+        Automaton nfa = thompsonConstruction(parsed.ast);
+        j["ok"]=true; j["analysis"]=toJson(computeGrowthAnalysis(nfa));
+        return j.dump();
+    } catch (const AutomatonTooComplexError& error) {
+        return complexityFailure(error);
+    }
 }
 
 std::string verifyCandidateJson(const std::string& pattern, int edgeSource, int edgeTarget) {
     ParseResult parsed = parse(pattern);
     json j;
     if (!parsed.ok) { j["ok"]=false; j["error"]=toJson(parsed.error); return j.dump(); }
-    Automaton nfa = thompsonConstruction(parsed.ast);
-    CandidateEdit edit{CandidateEditKind::DeleteEpsilonEdge, CandidateEdgeId{edgeSource, "eps", edgeTarget}, {}};
-    j["ok"]=true; j["candidate"]=toJson(verifyCandidate(nfa, edit));
-    return j.dump();
+    try {
+        Automaton nfa = thompsonConstruction(parsed.ast);
+        CandidateEdit edit{CandidateEditKind::DeleteEpsilonEdge, CandidateEdgeId{edgeSource, "eps", edgeTarget}, {}};
+        j["ok"]=true; j["candidate"]=toJson(verifyCandidate(nfa, edit));
+        return j.dump();
+    } catch (const AutomatonTooComplexError& error) {
+        return complexityFailure(error);
+    }
 }
 
 std::string verifyCandidateEdgesJson(const std::string& pattern, const std::string& edgesJson) {
     ParseResult parsed = parse(pattern);
     if (!parsed.ok) return json{{"ok", false}, {"error", toJson(parsed.error)}}.dump();
 
-    Automaton nfa = thompsonConstruction(parsed.ast);
+    Automaton nfa;
+    try {
+        nfa = thompsonConstruction(parsed.ast);
+    } catch (const AutomatonTooComplexError& error) {
+        return complexityFailure(error);
+    }
     json requested;
     try {
         requested = json::parse(edgesJson);
@@ -214,10 +236,14 @@ std::string runBoundedOptimizationJson(const std::string& pattern, int maxEditDe
     ParseResult parsed = parse(pattern);
     if (!parsed.ok) return json{{"ok", false}, {"error", toJson(parsed.error)}}.dump();
 
-    Automaton nfa = thompsonConstruction(parsed.ast);
-    BoundedSearchLimits limits;
-    if (maxEditDepth > 0) limits.maxEditDepth = static_cast<std::size_t>(maxEditDepth);
-    if (maxCandidates > 0) limits.maxCandidates = static_cast<std::size_t>(maxCandidates);
-    return json{{"ok", true}, {"search", toJson(searchBoundedEpsilonDeletions(nfa, limits))}}.dump();
+    try {
+        Automaton nfa = thompsonConstruction(parsed.ast);
+        BoundedSearchLimits limits;
+        if (maxEditDepth > 0) limits.maxEditDepth = static_cast<std::size_t>(maxEditDepth);
+        if (maxCandidates > 0) limits.maxCandidates = static_cast<std::size_t>(maxCandidates);
+        return json{{"ok", true}, {"search", toJson(searchBoundedEpsilonDeletions(nfa, limits))}}.dump();
+    } catch (const AutomatonTooComplexError& error) {
+        return complexityFailure(error);
+    }
 }
 }

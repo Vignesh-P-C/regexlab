@@ -657,3 +657,30 @@ Proceed with the **Automata Complexity and Optimization Lab** as a combined prop
 The bounded explorer is the major addition beyond the original subset-growth idea: it searches a constrained neighborhood of the generated NFA, verifies candidate languages, produces counterexamples for unsafe edits, and exposes trade-offs among verified variants. Its output is “best found in this declared search,” never “globally minimal.”
 
 This creates a credible novelty argument based on integration and pedagogy. It does **not** let us almost confirm that no other project, website, or app does the same thing. After implementation, a fresh, independently reviewed prior-art search can raise confidence, but the claim should remain scoped to the evidence reviewed.
+
+## 16. Dependency and pull-request split
+
+The two add-ons are separable as user-facing features, but they share important engine capabilities. Both should use an immutable copy of the same canonical Thompson NFA, stable transition identities, consistent metrics, explicit resource limits, and the same exact language-equivalence verifier. The verifier should return one of three outcomes: equivalent, different with a shortest witness, or inconclusive because a limit was reached.
+
+- **Subset Growth / NFA Structure Lab** needs the actual subset-construction trace and baseline metrics. Its first what-if milestone needs the shared copy/edit and equivalence API for one candidate edit.
+- **Bounded Optimization Explorer** reuses that API to generate, deduplicate, and verify many candidate edits, then rank equivalent candidates by Pareto metrics. It should not implement a second, subtly different equivalence checker.
+
+### Recommended PR sequence
+
+1. **PR A - Structure Lab foundation and first end-to-end slice.** Add the reusable candidate-copy and equivalence contracts, subset trace/metrics required by the view, and a one-edit workflow with exact status and witness reporting. Keep bounded enumeration out of this PR.
+2. **PR B - Bounded Optimization Explorer.** Add deterministic candidate generation, deduplication, budgets, partial-result reporting, and the Pareto view using PR A's shared API.
+
+These can be separate PRs. They can be developed at the same time only after the shared engine/API contract is agreed. If PR B imports code introduced by PR A, make PR B a stacked PR based on PR A (or its branch); merge PR A first, then rebase/retarget PR B to the updated main branch. Do not make two unrelated branches independently change the verifier and then merge both without reconciling their contracts.
+
+Issue #63's separate optimized-NFA display is not inherently a prerequisite if both add-ons operate on an immutable canonical Thompson NFA. However, inspect its merged interface before implementation: if #63 changes automaton IDs, provenance, or snapshot types, align the shared contracts rather than building parallel representations. Do not make the original NFA depend on the optimized view.
+
+## 17. Session-limited implementation and handoff
+
+A session at roughly 80% usage should not assume that both full features can be completed safely in the remainder. Preserve correctness over feature count:
+
+- First inspect repository state and the attached specification; preserve existing work and do not spend the remaining session repeating novelty research.
+- Deliver a small, working, tested vertical slice. Prefer PR A's shared verifier and one-edit Structure Lab slice before a broad search implementation, because PR B depends on reusable verification.
+- Add PR B only if there is enough time to implement and verify its candidate limits, result statuses, and Pareto filtering. Do not ship placeholder verification, unbounded enumeration, or a UI that labels unverified candidates as safe.
+- Begin wrap-up before the session is nearly exhausted. Open a PR as soon as a coherent, tested slice exists. If work is incomplete, mark it Draft and list completed scope, missing scope, test/build results, and follow-ups. If usage reaches 99%, immediately raise a PR for the reviewable work completed so far; do not leave it only in the session or in an uncommitted tree.
+- Report the PR URL and exact verification performed. Never describe a partial implementation as both add-ons complete.
+

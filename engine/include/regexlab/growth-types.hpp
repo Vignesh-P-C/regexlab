@@ -85,7 +85,7 @@ enum class CandidateEditKind { DeleteEpsilonEdge, DeleteEpsilonEdges };
 struct CandidateEdit {
     CandidateEditKind kind = CandidateEditKind::DeleteEpsilonEdge;
     CandidateEdgeId edge;
-    std::vector<CandidateEdgeId> edges{};
+    std::vector<CandidateEdgeId> edges;
 };
 
 struct EquivalenceWitness {
@@ -153,5 +153,4 @@ struct BoundedOptimizationResult {
     std::vector<BoundedOptimizationCandidate> candidates;
     std::vector<std::string> paretoFrontierIds;
 };
-
 }  // namespace regexlab

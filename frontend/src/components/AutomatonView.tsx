@@ -16,6 +16,7 @@ type Props = {
   activeStates: number[]; // #52: the current playback step's active state(s); [] on the AST tab
   traversedEdges: { from: number; to: number; label: string }[]; // #52: edges taken to reach this step; [] on the AST tab
   astNodeIndex: number | null; // #52: the AST tab's current postOrderAstNodes index; null on the other tabs
+  deadStateId?: number | null; // synthetic rejecting sink shown on a failed DFA/min-DFA step
 };
 
 /** #52: scroll `container` (never the page) just enough to bring `target`
@@ -227,7 +228,7 @@ function layeredLayout(
   // oversized canvas they then have to be shrunk back out of.
   const layerGap = Math.max(
     LAYER_GAP,
-    ...edges.map((edge) => estimateTransitionLabelWidth(formatTransitionSymbols(edge.symbols)) + 2 * NODE_R + 24),
+    ...edges.map((edge) => estimateTransitionLabelWidth(edge.symbols.includes("Σ") ? "Σ" : formatTransitionSymbols(edge.symbols)) + 2 * NODE_R + 24),
   );
   const width = 2 * MARGIN_X + (columns - 1) * layerGap;
   const height = 2 * MARGIN_Y + (tallest - 1) * ROW_GAP;
@@ -251,16 +252,25 @@ function AutomatonGraph({
   traversedEdges,
   stage,
   ast,
+  deadStateId,
 }: {
   automaton: Automaton;
   activeStates: number[];
   traversedEdges: { from: number; to: number; label: string }[];
   stage: Stage;
   ast: ASTNode | null;
+  deadStateId: number | null;
 }) {
   const isNfaView = stage === "nfa";
   const { stateCount, startState, acceptStates, transitions } = automaton;
   const edges = groupEdges(transitions);
+  const edgeLabel = (edge: GraphEdge) =>
+    deadStateId !== null &&
+    edge.from === deadStateId &&
+    edge.to === deadStateId &&
+    edge.symbols.includes("Σ")
+      ? "Σ"
+      : formatTransitionSymbols(edge.symbols);
   const edgeKeys = new Set(edges.map((e) => `${e.from}>${e.to}`));
   // The structural (construction-order) layout only applies -- and only
   // CAN apply -- to the NFA stage: it's built by re-walking the same AST
@@ -281,7 +291,7 @@ function AutomatonGraph({
   // highlighting remains attached to the edge the label describes.
   const labelRoutes: LabelRoute[] = edges.map((e) => {
     const key = `${e.from}>${e.to}`;
-    const label = formatTransitionSymbols(e.symbols);
+    const label = edgeLabel(e);
     const a = positions[e.from];
     const b = positions[e.to];
     if (e.from === e.to) {
@@ -365,7 +375,7 @@ function AutomatonGraph({
       {edges.map((e) => {
         const key = `${e.from}>${e.to}`;
         const route = routeByKey.get(key)!;
-        const label = formatTransitionSymbols(e.symbols);
+        const label = edgeLabel(e);
         const placed = placedLabels.get(key)!;
         return (
           <g key={key}>
@@ -393,11 +403,21 @@ function AutomatonGraph({
             cy={p.y}
             r={NODE_R}
             data-state-id={id}
-            className={`state${acceptStates.includes(id) ? " accept" : ""}${activeSet.has(id) ? " active" : ""}`}
+            className={
+              "state" +
+              (acceptStates.includes(id) ? " accept" : "") +
+              (id === deadStateId ? " dead" : "") +
+              (activeSet.has(id) ? " active" : "")
+            }
           />
           {acceptStates.includes(id) && <circle cx={p.x} cy={p.y} r={NODE_R - 6} className="accept-ring" />}
+          <title>
+            {id === deadStateId
+              ? "Rejecting sink state: every future input stays rejected"
+              : "State " + id + (acceptStates.includes(id) ? ", accepting" : "")}
+          </title>
           <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="13">
-            {id}
+            {id === deadStateId ? "⊥" : id}
           </text>
         </g>
       ))}
@@ -452,10 +472,11 @@ function AstTree({ node, highlightNodeIndex }: { node: ASTNode; highlightNodeInd
     }
   })(root);
 
+  const isOperatorNode = (n: ASTNode) => n.kind !== "char" && n.kind !== "charset";
   const label = (n: ASTNode) => {
     if (n.kind === "char") return "'" + n.value + "'";
     if (n.kind === "charset") return n.label;
-    if (n.kind === "concat") return "\\u00b7";
+    if (n.kind === "concat") return "·";
     if (n.kind === "alt") return "|";
     return n.kind === "star" ? "*" : n.kind === "plus" ? "+" : "?";
   };
@@ -479,9 +500,16 @@ function AstTree({ node, highlightNodeIndex }: { node: ASTNode; highlightNodeInd
             cy={p.y}
             r={NODE_R}
             data-node-index={highlightNodeIndex !== null && p.node === highlightedNode ? highlightNodeIndex : undefined}
-            className={`ast-node${p.node === highlightedNode ? " active" : ""}`}
+            className={`ast-node ${isOperatorNode(p.node) ? "operator" : "operand"}${p.node === highlightedNode ? " active" : ""}`}
           />
-          <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="13">
+          <text
+            x={p.x}
+            y={p.y + 4}
+            textAnchor="middle"
+            className={`ast-label ${isOperatorNode(p.node) ? "operator" : "operand"}`}
+            fontSize={isOperatorNode(p.node) ? 16 : 13}
+            fontWeight={isOperatorNode(p.node) ? 700 : undefined}
+          >
             {label(p.node)}
           </text>
         </g>
@@ -490,7 +518,15 @@ function AstTree({ node, highlightNodeIndex }: { node: ASTNode; highlightNodeInd
   );
 }
 
-export function AutomatonView({ stage, ast, automaton, activeStates, traversedEdges, astNodeIndex }: Props) {
+export function AutomatonView({
+  stage,
+  ast,
+  automaton,
+  activeStates,
+  traversedEdges,
+  astNodeIndex,
+  deadStateId = null,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // #52: keep the current step's highlight visible by scrolling only this
@@ -515,7 +551,7 @@ export function AutomatonView({ stage, ast, automaton, activeStates, traversedEd
   if (!automaton) return <div className="automaton-view empty">No pattern parsed yet.</div>;
   return (
     <div className="automaton-view" ref={containerRef}>
-      <AutomatonGraph automaton={automaton} activeStates={activeStates} traversedEdges={traversedEdges} stage={stage} ast={ast} />
+      <AutomatonGraph automaton={automaton} activeStates={activeStates} traversedEdges={traversedEdges} stage={stage} ast={ast} deadStateId={deadStateId} />
     </div>
   );
 }

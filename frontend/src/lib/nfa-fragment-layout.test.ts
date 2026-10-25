@@ -58,28 +58,22 @@ describe("layoutNfaFragments (#61 follow-up: textbook NFA layout)", () => {
     expect(layer[3] - layer[2]).toBeGreaterThan(1);
   });
 
-  it("a+ is laid out as a mandatory copy, a repeating copy, and one shared accept", () => {
+  it("lays plus out as one mandatory copy followed by a repeating copy", () => {
     const ast: ASTNode = { kind: "plus", child: char("a") };
     const { layer, stateCount } = layoutNfaFragments(ast);
     expect(stateCount).toBe(5);
+    // First 'a' is mandatory; the second is the a* loop; state 4 is final.
     expect(layer).toEqual([0, 1, 2, 3, 4]);
   });
 
-  it("a+bcd places both plus exits before the shared b continuation", () => {
+  it("fuses plus exits into the following concatenated fragment", () => {
     const ast: ASTNode = {
       kind: "concat",
-      left: {
-        kind: "concat",
-        left: {
-          kind: "concat",
-          left: { kind: "plus", child: char("a") },
-          right: char("b"),
-        },
-        right: char("c"),
-      },
-      right: char("d"),
+      left: { kind: "plus", child: char("a") },
+      right: { kind: "concat", left: char("b"), right: { kind: "concat", left: char("c"), right: char("d") } },
     };
     const { layer, stateCount } = layoutNfaFragments(ast);
+    // The b start is the shared exit for the mandatory and repeated a paths.
     expect(stateCount).toBe(10);
     expect(layer).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });

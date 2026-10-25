@@ -56,7 +56,7 @@ BoundedAutomatonMetrics measureBoundedAutomaton(const Automaton& automaton, cons
     metrics.reachableSubsetStateCount = dfa->stateCount;
     try {
         metrics.minimizedStateCount = minimize(*dfa).stateCount;
-    } catch (const MinimizationTooComplex& error) {
+    } catch (const AutomatonTooComplexError& error) {
         metrics.minimizationReason = error.what();
     }
     return metrics;

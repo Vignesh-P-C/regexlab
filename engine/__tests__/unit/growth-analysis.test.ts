@@ -11,6 +11,7 @@ import { computeAutomatonMetrics, computePowersetCeiling } from "../../automaton
 import { cloneAutomaton, listEligibleEpsilonEdges, applyCandidateEdit } from "../../candidate.js";
 import { checkEquivalence } from "../../equivalence.js";
 import { computeGrowthAnalysis, verifyCandidate } from "../../growth-analysis.js";
+import { AutomatonTooComplexError } from "../../resource-limits.js";
 
 function nfaFor(pattern: string): Automaton {
   const parsed = parse(pattern);
@@ -213,5 +214,13 @@ describe("computeGrowthAnalysis (#68)", () => {
     expect(analysis.minimizedStateCount).toBeLessThanOrEqual(analysis.reachableSubsetStateCount);
     expect(analysis.bound.status).toBe("not-computed");
     expect(analysis.powersetCeiling.exponent).toBe(nfa.stateCount);
+  });
+});
+
+describe("Growth Lab safety limits", () => {
+  it("bounds trace rows and reports a typed complexity error", () => {
+    const nfa = nfaFor("a");
+    expect(() => subsetConstructionTraced(nfa, undefined, 0))
+      .toThrow(AutomatonTooComplexError);
   });
 });

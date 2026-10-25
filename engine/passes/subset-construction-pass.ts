@@ -51,6 +51,7 @@
 import type { Automaton } from "../types.js";
 import type { SubsetConstructionStep, SubsetTrace } from "../growth-types.js";
 import { decodeCharacterSet, transitionMatches } from "../character-set.js";
+import { AutomatonTooComplexError, MAX_SUBSET_TRACE_STEPS } from "../resource-limits.js";
 
 export type SubsetConstructionLimits = {
   /** Maximum number of distinct reachable subsets (DFA states). */
@@ -115,7 +116,10 @@ function move(nfa: Automaton, states: Iterable<number>, symbol: string, budget?:
     for (const [label, targets] of nfa.transitions.get(state) ?? []) {
       accountWork(budget);
       if (transitionMatches(label, symbol)) {
-        for (const target of targets) result.add(target);
+        for (const target of targets) {
+          accountWork(budget);
+          result.add(target);
+        }
       }
     }
   }
@@ -250,9 +254,16 @@ export function subsetConstructionBounded(
   }
 }
 
-/** The ordinary pipeline retains its existing unbounded behavior and output. */
-export function subsetConstruction(nfa: Automaton): Automaton {
-  return subsetConstructionImpl(nfa);
+/** Determinization used by the ordinary pipeline, guarded by explicit state and work limits. */
+export function subsetConstruction(
+  nfa: Automaton,
+  limits: SubsetConstructionLimits = DEFAULT_SUBSET_CONSTRUCTION_LIMITS,
+): Automaton {
+  const result = subsetConstructionBounded(nfa, limits);
+  if (!result.ok) {
+    throw new AutomatonTooComplexError(`DFA determinization exceeded its safety limits: ${result.reason}.`);
+  }
+  return result.dfa;
 }
 
 /**
@@ -266,82 +277,111 @@ export function subsetConstruction(nfa: Automaton): Automaton {
  * byte-for-byte untouched by this feature — trace collection only runs
  * when this function is explicitly called.
  */
-export function subsetConstructionTraced(nfa: Automaton): { dfa: Automaton; trace: SubsetTrace } {
-  const alphabet = alphabetOf(nfa);
-
-  const stateSets: Set<number>[] = [];
-  const idBySetKey = new Map<string, number>();
-  const transitions = new Map<number, Map<string, number[]>>();
-  const steps: SubsetConstructionStep[] = [];
-
-  function idFor(nfaStateSet: Set<number>): { id: number; isNew: boolean } {
-    const key = setKey(nfaStateSet);
-    let id = idBySetKey.get(key);
-    if (id === undefined) {
-      id = stateSets.length;
-      idBySetKey.set(key, id);
-      stateSets.push(nfaStateSet);
-      return { id, isNew: true };
-    }
-    return { id, isNew: false };
+export function subsetConstructionTraced(
+  nfa: Automaton,
+  limits: SubsetConstructionLimits = DEFAULT_SUBSET_CONSTRUCTION_LIMITS,
+  maxTraceSteps = MAX_SUBSET_TRACE_STEPS,
+): { dfa: Automaton; trace: SubsetTrace } {
+  if (
+    !Number.isSafeInteger(limits.maxDfaStates) ||
+    limits.maxDfaStates < 1 ||
+    !Number.isSafeInteger(limits.maxWorkUnits) ||
+    limits.maxWorkUnits < 0 ||
+    !Number.isSafeInteger(maxTraceSteps) ||
+    maxTraceSteps < 0
+  ) {
+    throw new RangeError("Subset trace limits must be non-negative safe integers, with at least one DFA state allowed.");
   }
 
-  function sortedStates(states: Iterable<number>): number[] {
-    return [...states].sort((a, b) => a - b);
-  }
+  const budget = { remaining: limits.maxWorkUnits };
+  try {
+    const alphabet = alphabetOf(nfa, budget);
+    const stateSets: Set<number>[] = [];
+    const idBySetKey = new Map<string, number>();
+    const transitions = new Map<number, Map<string, number[]>>();
+    const steps: SubsetConstructionStep[] = [];
 
-  const startClosure = epsilonClosure(nfa, [nfa.startState]);
-  const { id: startState } = idFor(startClosure);
-
-  const processed = new Set<number>();
-  const worklist: number[] = [startState];
-
-  while (worklist.length > 0) {
-    const current = worklist.pop()!;
-    if (processed.has(current)) continue;
-    processed.add(current);
-
-    for (const symbol of alphabet) {
-      const sourceNfaStates = stateSets[current];
-      const moved = move(nfa, sourceNfaStates, symbol);
-      if (moved.size === 0) continue;
-
-      const closure = epsilonClosure(nfa, moved);
-      const { id: targetId, isNew } = idFor(closure);
-      const isAccepting = [...closure].some((s) => nfa.acceptStates.has(s));
-
-      steps.push({
-        sourceId: current,
-        sourceNfaStates: sortedStates(sourceNfaStates),
-        symbol,
-        moveNfaStates: sortedStates(moved),
-        closureNfaStates: sortedStates(closure),
-        targetId,
-        isNew,
-        isAccepting,
-      });
-
-      let bySymbol = transitions.get(current);
-      if (!bySymbol) {
-        bySymbol = new Map();
-        transitions.set(current, bySymbol);
+    function idFor(nfaStateSet: Set<number>): { id: number; isNew: boolean } {
+      const key = setKey(nfaStateSet, budget);
+      let id = idBySetKey.get(key);
+      if (id === undefined) {
+        if (stateSets.length >= limits.maxDfaStates) {
+          throw new SubsetConstructionBudgetExceeded("DFA-state limit exceeded");
+        }
+        id = stateSets.length;
+        idBySetKey.set(key, id);
+        stateSets.push(nfaStateSet);
+        return { id, isNew: true };
       }
-      bySymbol.set(symbol, [targetId]);
-
-      if (!processed.has(targetId)) worklist.push(targetId);
+      return { id, isNew: false };
     }
-  }
 
-  const acceptStates = new Set<number>();
-  stateSets.forEach((nfaStateSet, dfaId) => {
-    for (const nfaState of nfaStateSet) {
-      if (nfa.acceptStates.has(nfaState)) {
-        acceptStates.add(dfaId);
-        break;
+    function sortedStates(states: Iterable<number>): number[] {
+      return [...states].sort((a, b) => a - b);
+    }
+
+    const startClosure = epsilonClosure(nfa, [nfa.startState], budget);
+    const { id: startState } = idFor(startClosure);
+    const processed = new Set<number>();
+    const worklist: number[] = [startState];
+
+    while (worklist.length > 0) {
+      const current = worklist.pop()!;
+      if (processed.has(current)) continue;
+      processed.add(current);
+
+      for (const symbol of alphabet) {
+        accountWork(budget);
+        const sourceNfaStates = stateSets[current];
+        const moved = move(nfa, sourceNfaStates, symbol, budget);
+        if (moved.size === 0) continue;
+
+        const closure = epsilonClosure(nfa, moved, budget);
+        const { id: targetId, isNew } = idFor(closure);
+        accountWork(budget, closure.size);
+        const isAccepting = [...closure].some((state) => nfa.acceptStates.has(state));
+        if (steps.length >= maxTraceSteps) {
+          throw new SubsetConstructionBudgetExceeded("subset-trace step limit exceeded");
+        }
+
+        steps.push({
+          sourceId: current,
+          sourceNfaStates: sortedStates(sourceNfaStates),
+          symbol,
+          moveNfaStates: sortedStates(moved),
+          closureNfaStates: sortedStates(closure),
+          targetId,
+          isNew,
+          isAccepting,
+        });
+
+        let bySymbol = transitions.get(current);
+        if (!bySymbol) {
+          bySymbol = new Map();
+          transitions.set(current, bySymbol);
+        }
+        bySymbol.set(symbol, [targetId]);
+        if (!processed.has(targetId)) worklist.push(targetId);
       }
     }
-  });
 
-  const dfa: Automaton = { stateCount: stateSets.length, startState, acceptStates, transitions };
-  return { dfa, trace: { steps, subsetCount: stateSets.length } };
+    const acceptStates = new Set<number>();
+    stateSets.forEach((nfaStateSet, dfaId) => {
+      accountWork(budget, nfaStateSet.size);
+      for (const nfaState of nfaStateSet) {
+        if (nfa.acceptStates.has(nfaState)) {
+          acceptStates.add(dfaId);
+          break;
+        }
+      }
+    });
+
+    const dfa: Automaton = { stateCount: stateSets.length, startState, acceptStates, transitions };
+    return { dfa, trace: { steps, subsetCount: stateSets.length } };
+  } catch (error) {
+    if (error instanceof SubsetConstructionBudgetExceeded) {
+      throw new AutomatonTooComplexError(`Growth Lab subset construction stopped safely: ${error.message}.`);
+    }
+    throw error;
+  }
 }

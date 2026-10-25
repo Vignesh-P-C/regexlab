@@ -134,7 +134,7 @@ export function BoundedOptimizationExplorer({ pattern, baselineNfa, runBoundedOp
       )}
       {response && !searchIsStale && !response.ok && (
         <div className="growth-alert growth-alert--error" role="alert">
-          Pattern error: {response.error.type}
+          {response.error.message ?? `Pattern error: ${response.error.type}`}
         </div>
       )}
       {response?.ok && !searchIsStale && search && (

@@ -116,14 +116,6 @@ describe("GrowthPanel source-pattern tracking (#68)", () => {
     expect(screen.getByRole("checkbox")).toBeTruthy();
   });
 
-  it("hides the unsupported structural upper-bound placeholder", () => {
-    renderPanel("a");
-    fireEvent.click(screen.getByRole("button", { name: /explore subset growth/i }));
-
-    expect(screen.queryByText("Research-based structural upper bound")).toBeNull();
-    expect(screen.queryByText("Not computed")).toBeNull();
-  });
-
   it("verifies multiple selected epsilon deletions together and displays the witness", () => {
     const verifyCandidate = vi.fn(() => differentCandidate);
     renderPanel("a|a", twoEdgeNfa, vi.fn(() => analysis), verifyCandidate);

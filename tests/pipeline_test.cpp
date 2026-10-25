@@ -94,3 +94,13 @@ TEST_CASE("Pipeline — extended operators and classes preserve full-match seman
         REQUIRE((result.trace.result == MatchResultType::Match) == c.matches);
     }
 }
+
+TEST_CASE("Pipeline nested plus fails with a typed complexity error before exhausting memory", "[pipeline][limits]") {
+    std::string pattern = "a+";
+    for (int depth = 0; depth < 12; ++depth) pattern = "(" + pattern + ")+";
+    const PipelineResult result = runPipeline(pattern, "a");
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error.type == ParseErrorType::AutomatonTooComplex);
+    REQUIRE(result.error.message.has_value());
+    REQUIRE(result.error.message->find("2,048") != std::string::npos);
+}

@@ -32,21 +32,7 @@ private:
 
 class Parser {
 public:
-    // Two guards keep recursion bounded (limits come from ParseLimits):
-    //
-    //  - maxNestingDepth: bounds group nesting so thousands of '(' in a row
-    //    fail as a normal ParseError instead of overflowing the call stack
-    //    (reproduced: ~11-13k levels segfaults on an 8MB stack).
-    //
-    //  - maxPatternLength: the depth guard only counts '(' , but long chains
-    //    of plain concatenation/alternation build equally deep ASTs (depth =
-    //    pattern length) that recurse in the AST destructor, ThompsonPass and
-    //    MinimizationPass. Measured on emcc 6.0.9 (Release, 5MB stack): a
-    //    plain literal costs 0.24s at 500 chars and 0.80s at 1000 (Moore's
-    //    minimization is O(n^2)), and every shape hits the JS call-stack
-    //    ceiling by ~1500-3000 chars. 500 keeps the worst shape fast with
-    //    ~3x margin under the lowest crash ceiling. See issue #29. It applies
-    //    to an all-ASCII prefix only — see exceedsLengthCap for why.
+
     Parser(const std::string& pattern, const ParseLimits& limits)
         : pattern_(pattern), limits_(limits) {}
 
@@ -94,29 +80,6 @@ private:
 
     char advance() { return pattern_[pos_++]; }
 
-    /**
-     * Does the length cap apply to this pattern?
-     *
-     * The cap counts units, and the two engines count different ones: C++
-     * counts UTF-8 bytes, TS counts UTF-16 code units. Comparing a raw length
-     * against the cap therefore diverged on non-ASCII input — "\xC3\xA9" x 300
-     * is 600 bytes but 300 units: TS passed the length check then returned
-     * UnexpectedToken@0, while the old C++ byte check returned
-     * PatternTooComplex@500 before parsing (length cap: issue #29 / PR #33;
-     * ASCII-only rule: issue #30).
-     *
-     * The fix is to apply the cap only to an all-ASCII prefix. Inside such a
-     * prefix one byte is exactly one unit, so both engines measure the same
-     * thing and the divergence disappears by construction.
-     *
-     * Skipping the cap is safe: positions 0..cap are then known to contain a
-     * non-ASCII byte, and requireAscii rejects the first one the parser
-     * reaches, so at most `cap` bytes are ever consumed and recursion stays
-     * bounded no matter how long the rest of the pattern is. Verified in both
-     * engines for literals, groups and escapes.
-     *
-     * Mirrors exceedsLengthCap in parser-pass.ts.
-     */
     bool exceedsLengthCap() const {
         const size_t cap = static_cast<size_t>(limits_.maxPatternLength);
         if (pattern_.size() <= cap) return false;
@@ -127,15 +90,6 @@ private:
         return true;
     }
 
-    /**
-     * The engine's alphabet is ASCII (bytes 0x00-0x7F). A byte >= 0x80 is
-     * rejected where a literal would be consumed, so the leftmost error in
-     * the pattern still wins (")\xC3\xA9" reports the dangling ')' first).
-     *
-     * `found` is a fixed description, never the raw byte: a lone byte of a
-     * multi-byte UTF-8 sequence is invalid UTF-8 and made the JSON bridge
-     * throw (nlohmann type_error.316) before this check existed. See D4.
-     */
     void requireAscii(char c, size_t pos) const {
         if (static_cast<unsigned char>(c) >= 0x80) {
             throw ParseFailure(ParseError{ParseErrorType::UnexpectedToken,
@@ -344,7 +298,7 @@ private:
                 throw ParseFailure(ParseError{ParseErrorType::UnmatchedParen, static_cast<int>(openParenPos),
                     std::string("')'"), found});
             }
-            advance();  // consume ')'
+            advance();
             return inner;
         }
         if (*c == '[') return parseCharacterClass();
@@ -355,8 +309,6 @@ private:
             chars.erase(std::remove(chars.begin(), chars.end(), 13), chars.end());
             return makeCharacterSet(std::move(chars), ".");
         }
-            // An operator appearing where an atom was expected has nothing to
-            // apply to — e.g. "*ab", "a||b", "a**" (second '*'), "()" handled above.
         if (*c == '|' || *c == '*' || *c == '+' || *c == '?' || *c == ')') {
             throw ParseFailure(ParseError{ParseErrorType::DanglingOperator, static_cast<int>(pos_),
                 std::string("a character or '('"), std::string(1, *c)});

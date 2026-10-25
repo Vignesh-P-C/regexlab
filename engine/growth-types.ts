@@ -101,7 +101,6 @@ export type CandidateResult = {
   equivalence: EquivalenceResult;
 };
 
-
 /** Fixed engine work limits, plus the two learner-adjustable search limits. */
 export type BoundedSearchLimits = {
   maxEligibleEdges: number;

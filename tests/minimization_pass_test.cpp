@@ -102,3 +102,8 @@ TEST_CASE("MinimizationPass — accepting and non-accepting states never merge",
         REQUIRE(min.acceptStates.size() > 0);
     }
 }
+
+TEST_CASE("MinimizationPass refinement stops at the explicit work cap", "[minimization][limits]") {
+    const auto [dfa, min] = minDfaFor("(a|b)*ab");
+    REQUIRE_THROWS_AS(minimize(dfa, MinimizationLimits{100, 0}), AutomatonTooComplexError);
+}

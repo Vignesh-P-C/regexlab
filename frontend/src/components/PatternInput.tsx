@@ -51,9 +51,9 @@ export function PatternInput({ pattern, input, onPatternChange, onInputChange, e
       </label>
       {error && (
         <div className="parse-error" role="alert">
-          {error.type} at position {error.position}
-          {error.expected ? ` — expected ${error.expected}` : ""}
-          {error.found ? `, found "${error.found}"` : ""}
+          {error.message ?? `${error.type} at position ${error.position}`}
+          {!error.message && error.expected ? ` — expected ${error.expected}` : ""}
+          {!error.message && error.found ? `, found "${error.found}"` : ""}
           {/* Reserved slot for the AI suggestion layer (not built yet):
               <SuggestionBanner error={error} suggestion={...} onAccept={...} /> */}
         </div>

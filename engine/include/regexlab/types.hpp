@@ -14,6 +14,7 @@
 
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -137,6 +138,12 @@ struct ParseError {
     int position;
     std::optional<std::string> expected;
     std::optional<std::string> found;
+    std::optional<std::string> message = std::nullopt;
+};
+
+class AutomatonTooComplexError : public std::runtime_error {
+public:
+    explicit AutomatonTooComplexError(const std::string& message) : std::runtime_error(message) {}
 };
 
 struct ParseResult {
