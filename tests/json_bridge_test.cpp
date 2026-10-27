@@ -247,3 +247,32 @@ TEST_CASE("json_bridge complexity caps return a structured error on every patter
         REQUIRE(j["error"]["message"].get<std::string>().find("2,048") != std::string::npos);
     }
 }
+
+TEST_CASE("json_bridge -- minimization safety guard still fires on a non-compressible wide-alphabet pattern",
+          "[json_bridge][limits]") {
+    // 500 literals stay within the parser's pattern-length limit, but each of
+    // the 79 distinct symbols is "live" at a different, disjoint set of
+    // states (a straight concatenation chain), so alphabet equivalence-class
+    // compression (minimization-pass.cpp) cannot collapse any of them -- this
+    // is exactly the adversarial shape representativeAlphabetOf's own comment
+    // names as the case compression buys nothing for. The default work
+    // budget (state-count^2 * alphabet size, post-compression) still has to
+    // catch it: 501^2 * 79 ~= 19.8M, well over the 5,000,000-unit default.
+    // This guards against ever losing the compression fix silently again --
+    // without it, this same pattern would instead cost 501^2 * 79 work units
+    // measured against an uncompressed alphabet that happens to equal the
+    // compressed one here, so the real regression case to watch is a wide
+    // but highly-compressible alphabet (see the `.` x500 case in
+    // scripts/check-wasm-limits.mjs), which this test does not cover and
+    // isn't meant to -- it only confirms the backstop threshold itself still
+    // works when compression genuinely cannot help.
+    const std::string symbols = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&,-/:;<=>@^_";
+    std::string pattern;
+    pattern.reserve(500);
+    for (size_t i = 0; i < 500; ++i) pattern.push_back(symbols[i % symbols.size()]);
+
+    json j = json::parse(runPipelineJson(pattern, ""));
+    REQUIRE_FALSE(j["ok"].get<bool>());
+    REQUIRE(j["error"]["type"].get<std::string>() == "AutomatonTooComplex");
+    REQUIRE(j["error"]["position"].get<int>() == 0);
+}
