@@ -140,6 +140,9 @@ regexlab/
 │   └── public/wasm/                          # regexlab.js + regexlab.wasm go here (built locally, not committed)
 ├── api/
 │   └── suggest.ts                            # 📋 only if the AI layer uses an LLM (decision pending, issue #19)
+├── report/                                   # 🆕 #26/#27: draft BCSE307P course project report
+│   ├── RegexLab_Course_Project_Report.pdf    # draft report (several fields marked <<TODO>>; see readme note below)
+│   └── report.html                           # report source — edit this and re-render to update the PDF
 ├── CMakeLists.txt                            # ✅ C++ build — FetchContent for Catch2 + nlohmann/json; WASM target defaults to Release
 ├── package.json
 ├── tsconfig.json
@@ -265,7 +268,7 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 | Contract freeze (`docs/data-contracts.md`) | 📋 Not started (issue #16) | — |
 | AI suggestion layer + hard gate | 📋 Not started — design decision pending (issues #19–#21) | — |
 | CI + deployment | 📋 Not started (issues #22, #23) | — |
-| Final report | 📋 Not started (issues #26, #27) | — |
+| Final report | 🔄 Draft added — `report/RegexLab_Course_Project_Report.pdf` (issues #26, #27). Student names/reg. numbers and the third team member are `<<TODO>>`; Chapter 4 figures are schematic diagrams, not live screenshots; two references and the WASM limit-probe count are flagged as not independently re-verified in `report/report.html`'s own notes. Needs a pass to fill TODOs and tighten against the final merged state of #68/#72 | — |
 | Optional AST simplifier (#45) | 🤔 Open; decision pending. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope; the LL(1) table is an untracked idea and is not currently planned | — |
 | Hopcroft's / isomorphism testing (Hard Stretch) | 🔒 Locked until Core is done | — |
 
