@@ -19,22 +19,34 @@ namespace regexlab {
 PipelineResult runPipeline(const std::string& pattern, const std::string& input) {
     ParseResult parsed = parse(pattern);
     if (!parsed.ok) {
+        // Short-circuit: an invalid pattern never reaches Thompson's
+        // construction or anything after it.
         return PipelineResult{false, nullptr, Automaton{}, Automaton{},
-                              Automaton{}, MatchTrace{}, parsed.error};
+                               Automaton{},    MatchTrace{}, parsed.error};
     }
 
+    // Both ThompsonPass (NFA-state estimate, see thompson-pass.cpp) and
+    // MinimizationPass (work-budget check, see minimization-pass.cpp) guard
+    // against a legal-but-oversized pattern by throwing the same
+    // AutomatonTooComplexError — so one catch here covers both guards, the
+    // same short-circuit shape as the parse-failure branch above: neither
+    // SubsetConstructionPass/MinimizationPass nor MatcherPass ever runs on
+    // a pattern whichever guard rejected.
     try {
         Automaton nfa = thompsonConstruction(parsed.ast);
         Automaton dfa = subsetConstruction(nfa);
         Automaton minDfa = minimize(dfa);
         MatchTrace trace = match(minDfa, input);
+
+        // Every intermediate stage is carried through, not just the final
+        // trace — this is what lets the frontend visualizer render AST ->
+        // NFA -> DFA -> min-DFA, not only the match/no-match result.
         return PipelineResult{true, parsed.ast, nfa, dfa, minDfa, trace, ParseError{}};
     } catch (const AutomatonTooComplexError& error) {
-        ParseError engineError{
-            ParseErrorType::AutomatonTooComplex, 0, std::nullopt, std::nullopt,
-            std::string(error.what())};
+        ParseError engineError{ParseErrorType::AutomatonTooComplex, 0, std::nullopt, std::nullopt,
+                                std::string(error.what())};
         return PipelineResult{false, nullptr, Automaton{}, Automaton{},
-                              Automaton{}, MatchTrace{}, std::move(engineError)};
+                               Automaton{},    MatchTrace{}, std::move(engineError)};
     }
 }
 
