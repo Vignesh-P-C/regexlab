@@ -50,9 +50,8 @@
   <p class="bold">BCSE307P &ndash; Compiler Design Project</p>
   <div style="margin-top:30pt;"></div>
   <p class="bold">by</p>
-  <p class="todo">&lt;&lt;TODO: Student 1 Name&gt;&gt; (&lt;&lt;TODO: Reg. No. 1&gt;&gt;)</p>
-  <p class="todo">&lt;&lt;TODO: Student 2 Name&gt;&gt; (&lt;&lt;TODO: Reg. No. 2&gt;&gt;)</p>
-  <p class="todo">&lt;&lt;TODO: Student 3 Name&gt;&gt; (&lt;&lt;TODO: Reg. No. 3&gt;&gt;)</p>
+  <p>Vignesh P C (24BCE0695)</p>
+  <p>Coppisetty Venkat Sai Ujwal (24BCE0667)</p>
   <div style="margin-top:30pt;"></div>
   <p>Under the guidance of</p>
   <p class="bold">Dr. Islabudeen M<br>Associate Professor Grade 1, SCOPE</p>
@@ -69,9 +68,8 @@
   <p>Place: Vellore</p>
   <p>Date: <span class="todo">&lt;&lt;TODO: submission date&gt;&gt;</span></p>
   <div style="margin-top:20pt;"></div>
-  <p class="todo">&lt;&lt;TODO: Student 1 Name &amp; Reg. No., signature&gt;&gt;</p>
-  <p class="todo">&lt;&lt;TODO: Student 2 Name &amp; Reg. No., signature&gt;&gt;</p>
-  <p class="todo">&lt;&lt;TODO: Student 3 Name &amp; Reg. No., signature&gt;&gt;</p>
+  <p>Vignesh P C (24BCE0695)</p>
+  <p>Coppisetty Venkat Sai Ujwal (24BCE0667)</p>
 </section>
 
 <!-- =============== ACKNOWLEDGEMENT =============== -->
@@ -126,7 +124,7 @@
   <div class="lof-row"><span>Figure 4.4 &ndash; Class diagram (core data contracts)</span><span class="dots"></span><span>10</span></div>
   <div class="lof-row"><span>Figure 4.5 &ndash; Sequence diagram for one compile-and-match request</span><span class="dots"></span><span>11</span></div>
   <div class="lof-row"><span>Figure 5.1 &ndash; Pass pipeline for pattern (a|b)*abb</span><span class="dots"></span><span>13</span></div>
-  <p class="small" style="margin-top:10pt;"><span class="todo">Note:</span> figures in this report are schematic diagrams drawn directly from the project's own source identifiers (file/type/function names verified against the code). Live browser screenshots of the running application (AST/NFA/DFA/min-DFA views, step playback, Growth Panel, optimizer safe/unsafe witness) were <span class="bold">not captured</span> in this session because doing so needs a running dev server and a rebuilt WASM module, which did not fit the 20-minute report-writing budget; this is listed here rather than faked, per instruction.</p>
+  <p class="small" style="margin-top:10pt;"><span class="todo">Note:</span> figures in this report are schematic diagrams drawn directly from the project's own source identifiers (file/type/function names verified against the code), not graphviz/matplotlib output. Live browser screenshots of the running application (AST/NFA/DFA/min-DFA views, step playback, Growth Panel, optimizer safe/unsafe witness) were <span class="bold">not captured</span>, because doing so needs a running dev server driven through a real browser session, which was not done while drafting this report; this is listed here rather than faked.</p>
 </section>
 
 <!-- =============== LIST OF TABLES =============== -->
@@ -139,8 +137,10 @@
   <div class="lot-row"><span>Table 5.2 &ndash; Complexity of each pass</span><span class="dots"></span><span>14</span></div>
   <div class="lot-row"><span>Table 5.3 &ndash; Input guards</span><span class="dots"></span><span>14</span></div>
   <div class="lot-row"><span>Table 5.4 &ndash; Automated test results</span><span class="dots"></span><span>15</span></div>
+  <div class="lot-row"><span>Table 5.4b &ndash; Compiled-WebAssembly limit-probe suite</span><span class="dots"></span><span>15</span></div>
   <div class="lot-row"><span>Table 7.1 &ndash; Pipeline state counts for representative patterns</span><span class="dots"></span><span>17</span></div>
   <div class="lot-row"><span>Table 7.2 &ndash; Minimization stress timings, native build</span><span class="dots"></span><span>18</span></div>
+  <div class="lot-row"><span>Table 7.2b &ndash; Same three patterns, rebuilt WASM module</span><span class="dots"></span><span>18</span></div>
   <div class="lot-row"><span>Table 7.3 &ndash; Bounded-optimizer safe vs. unsafe deletion examples</span><span class="dots"></span><span>18</span></div>
   <div class="lot-row"><span>Table 7.4 &ndash; Cost analysis (tooling)</span><span class="dots"></span><span>19</span></div>
 </section>
@@ -222,7 +222,7 @@
   <h1 class="chapter">CHAPTER 2<br>PROJECT DESCRIPTION AND GOALS</h1>
 
   <h2 class="section">2.1 Literature Review</h2>
-  <p>The theoretical foundation of this project rests on a small number of classical results. Kleene's characterization of regular languages is realised constructively by <span class="bold">Thompson's construction</span> [1], which builds an NFA from a regular expression in time linear in the expression's size, using a small number of fixed per-operator wiring rules. <span class="bold">Rabin and Scott</span> [2] gave the subset-construction (powerset) algorithm that determinizes any NFA into an equivalent DFA, at the cost of a worst-case exponential blow-up in state count that this report states honestly rather than hides. <span class="bold">Moore</span> [3] gave an iterative partition-refinement algorithm for collapsing a DFA to its unique minimal equivalent, later improved asymptotically by <span class="bold">Hopcroft</span> [4] from O(n&sup2;&middot;k) to O(n&middot;log n&middot;k) by always refining using the smaller half of a split. <span class="bold">Aho, Lam, Sethi and Ullman</span> [5] is the textbook that frames all of the above as the worked example for a course's lexical-analysis module, and is the explicit syllabus anchor for this project's design.</p>
+  <p>The theoretical foundation of this project rests on a small number of classical results. Kleene's characterization of regular languages is realised constructively by <span class="bold">Thompson's construction</span> [1], which builds an NFA from a regular expression in time linear in the expression's size, using a small number of fixed per-operator wiring rules. <span class="bold">Rabin and Scott</span> [2] gave the subset-construction (powerset) algorithm that determinizes any NFA into an equivalent DFA, at the cost of a worst-case exponential blow-up in state count that this report states honestly rather than hides. <span class="bold">Moore</span> [3] gave an iterative partition-refinement algorithm for collapsing a DFA to its unique minimal equivalent. <span class="bold">Hopcroft</span> [4] later gave an asymptotically faster algorithm for the same problem, O(n&middot;log n&middot;k) instead of Moore's O(n&sup2;&middot;k), by always refining using the smaller half of a split &ndash; this is a literature fact about the two algorithms in general, not a claim about this project: <span class="bold">RegexLab implements Moore's algorithm only</span> (see &sect;5.2, &sect;8); Hopcroft's algorithm was deliberately scoped out and is not built. <span class="bold">Aho, Lam, Sethi and Ullman</span> [5] is the textbook that frames all of the above as the worked example for a course's lexical-analysis module, and is the explicit syllabus anchor for this project's design.</p>
   <p>Outside the classical automata-theory line, <span class="bold">Cox</span> [6] documents, from an engineering perspective, why real-world regular-expression libraries that use backtracking search can exhibit exponential-time matching on adversarial input, and argues for automaton-based matching (as this project uses) as the principled alternative. More recent formal work continues to refine these constructions and their complexity: <span class="bold">Baburin and Cotterell</span> [7] study glushkov-style and related finite-automaton constructions for regular expressions; <span class="bold">Jiang and Ravikumar</span> [8] give complexity results for minimizing and transforming finite automata under various equivalence notions; and <span class="bold">Holzer et al.</span> [9] study the state complexity of operations on finite automata. These sources are cited to situate the project's algorithms in the literature, not to claim that RegexLab contributes a new result to that literature.</p>
 
   <h2 class="section">2.2 Research Gap</h2>
@@ -293,7 +293,7 @@
   <div class="fig-box">
   <svg width="620" height="230" viewBox="0 0 620 230" xmlns="http://www.w3.org/2000/svg">
     <rect x="20" y="15" width="580" height="55" fill="none" stroke="black"/>
-    <text x="310" y="37" text-anchor="middle" font-size="13">Presentation Layer (React UI: pattern input, test-string input, playback controls)</text>
+    <text x="310" y="37" text-anchor="middle" font-size="12">Presentation Layer (React UI: pattern input, test-string input, playback controls)</text>
     <text x="310" y="55" text-anchor="middle" font-size="11" font-style="italic">frontend/src/App.tsx</text>
     <line x1="150" y1="70" x2="150" y2="90" stroke="black" marker-end="url(#a)"/>
     <line x1="470" y1="70" x2="470" y2="90" stroke="black" marker-end="url(#a)"/>
@@ -316,17 +316,19 @@
 
   <h2 class="section">4.2 Data Flow, Use Case, Class and Sequence Diagrams</h2>
   <div class="fig-box">
-  <svg width="620" height="150" viewBox="0 0 620 150" xmlns="http://www.w3.org/2000/svg">
-    <rect x="10" y="55" width="110" height="40" fill="none" stroke="black"/><text x="65" y="79" text-anchor="middle" font-size="12">pattern, input</text>
-    <line x1="120" y1="75" x2="170" y2="75" stroke="black" marker-end="url(#b)"/>
-    <ellipse cx="220" cy="75" rx="55" ry="25" fill="none" stroke="black"/><text x="220" y="79" text-anchor="middle" font-size="11">ParserPass</text>
-    <line x1="275" y1="75" x2="320" y2="75" stroke="black" marker-end="url(#b)"/>
-    <ellipse cx="365" cy="75" rx="55" ry="25" fill="none" stroke="black"/><text x="365" y="79" text-anchor="middle" font-size="11">Thompson+Subset+Minimize</text>
-    <line x1="420" y1="75" x2="465" y2="75" stroke="black" marker-end="url(#b)"/>
-    <ellipse cx="510" cy="75" rx="55" ry="25" fill="none" stroke="black"/><text x="510" y="79" text-anchor="middle" font-size="11">MatcherPass</text>
-    <line x1="565" y1="75" x2="600" y2="75" stroke="black" marker-end="url(#b)"/>
-    <rect x="600" y="55" width="15" height="40" fill="none" stroke="black"/>
-    <text x="608" y="45" text-anchor="middle" font-size="10">UI</text>
+  <svg width="700" height="150" viewBox="0 0 700 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="55" width="100" height="40" fill="none" stroke="black"/><text x="60" y="79" text-anchor="middle" font-size="12">pattern, input</text>
+    <line x1="110" y1="75" x2="140" y2="75" stroke="black" marker-end="url(#b)"/>
+    <ellipse cx="185" cy="75" rx="55" ry="25" fill="none" stroke="black"/><text x="185" y="79" text-anchor="middle" font-size="11">ParserPass</text>
+    <line x1="240" y1="75" x2="275" y2="75" stroke="black" marker-end="url(#b)"/>
+    <ellipse cx="380" cy="75" rx="95" ry="30" fill="none" stroke="black"/>
+    <text x="380" y="71" text-anchor="middle" font-size="10.5">Thompson + Subset</text>
+    <text x="380" y="85" text-anchor="middle" font-size="10.5">Construction + Minimize</text>
+    <line x1="475" y1="75" x2="510" y2="75" stroke="black" marker-end="url(#b)"/>
+    <ellipse cx="590" cy="75" rx="55" ry="25" fill="none" stroke="black"/><text x="590" y="79" text-anchor="middle" font-size="11">MatcherPass</text>
+    <line x1="645" y1="75" x2="665" y2="75" stroke="black" marker-end="url(#b)"/>
+    <rect x="665" y="55" width="15" height="40" fill="none" stroke="black"/>
+    <text x="672" y="45" text-anchor="middle" font-size="10">UI</text>
     <defs><marker id="b" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>
   </svg>
   </div>
@@ -390,20 +392,21 @@
   <div class="fig-caption">Figure 4.4 &ndash; Class diagram of the core data contracts (field names verified against <code>engine/include/regexlab/types.hpp</code> and <code>frontend/src/types/engine.ts</code>)</div>
 
   <div class="fig-box">
-  <svg width="620" height="230" viewBox="0 0 620 230" xmlns="http://www.w3.org/2000/svg">
-    <text x="60" y="20" font-size="11" font-weight="bold">UI</text>
-    <text x="220" y="20" font-size="11" font-weight="bold">runPipeline()</text>
-    <text x="400" y="20" font-size="11" font-weight="bold">ParserPass</text>
-    <text x="540" y="20" font-size="11" font-weight="bold">Thompson/Subset/Min/Matcher</text>
+  <svg width="680" height="230" viewBox="0 0 680 230" xmlns="http://www.w3.org/2000/svg">
+    <text x="60" y="20" text-anchor="middle" font-size="11" font-weight="bold">UI</text>
+    <text x="220" y="20" text-anchor="middle" font-size="11" font-weight="bold">runPipeline()</text>
+    <text x="400" y="20" text-anchor="middle" font-size="11" font-weight="bold">ParserPass</text>
+    <text x="610" y="15" text-anchor="middle" font-size="10.5" font-weight="bold">Thompson/Subset/</text>
+    <text x="610" y="27" text-anchor="middle" font-size="10.5" font-weight="bold">Minimize/MatcherPass</text>
     <line x1="60" y1="30" x2="60" y2="210" stroke="black" stroke-dasharray="2,2"/>
     <line x1="220" y1="30" x2="220" y2="210" stroke="black" stroke-dasharray="2,2"/>
     <line x1="400" y1="30" x2="400" y2="210" stroke="black" stroke-dasharray="2,2"/>
-    <line x1="560" y1="30" x2="560" y2="210" stroke="black" stroke-dasharray="2,2"/>
+    <line x1="610" y1="30" x2="610" y2="210" stroke="black" stroke-dasharray="2,2"/>
     <line x1="60" y1="50" x2="220" y2="50" stroke="black" marker-end="url(#d)"/><text x="130" y="45" font-size="9" text-anchor="middle">pattern, input</text>
     <line x1="220" y1="70" x2="400" y2="70" stroke="black" marker-end="url(#d)"/><text x="310" y="65" font-size="9" text-anchor="middle">parse(pattern)</text>
     <line x1="400" y1="100" x2="220" y2="100" stroke="black" marker-end="url(#d)" stroke-dasharray="4,2"/><text x="310" y="95" font-size="9" text-anchor="middle">ParseResult{ok, ast | error}</text>
-    <line x1="220" y1="120" x2="560" y2="120" stroke="black" marker-end="url(#d)"/><text x="390" y="115" font-size="9" text-anchor="middle">if ok: thompson &rarr; subset &rarr; minimize &rarr; match</text>
-    <line x1="560" y1="150" x2="220" y2="150" stroke="black" marker-end="url(#d)" stroke-dasharray="4,2"/><text x="390" y="145" font-size="9" text-anchor="middle">nfa, dfa, minDfa, trace (or AutomatonTooComplexError)</text>
+    <line x1="220" y1="120" x2="610" y2="120" stroke="black" marker-end="url(#d)"/><text x="415" y="115" font-size="9" text-anchor="middle">if ok: thompson &rarr; subset &rarr; minimize &rarr; match</text>
+    <line x1="610" y1="150" x2="220" y2="150" stroke="black" marker-end="url(#d)" stroke-dasharray="4,2"/><text x="415" y="145" font-size="9" text-anchor="middle">nfa, dfa, minDfa, trace (or AutomatonTooComplexError)</text>
     <line x1="220" y1="180" x2="60" y2="180" stroke="black" marker-end="url(#d)" stroke-dasharray="4,2"/><text x="130" y="175" font-size="9" text-anchor="middle">PipelineResult (JSON)</text>
     <defs><marker id="d" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>
   </svg>
@@ -456,8 +459,16 @@
     <tr><td>TypeScript strict typecheck (<code>tsc --noEmit</code>)</td><td>Passed, zero errors</td></tr>
     <tr><td>Vitest</td><td>209 tests passed across 20 test files, 0 failed</td></tr>
     <tr><td>Native C++ Catch2 suite (Release build, <code>engine_tests</code>)</td><td>81 test cases passed, 4,923 assertions passed, 0 failed</td></tr>
+    <tr><td>Frontend production build (<code>npm --prefix frontend run build</code>)</td><td>Passed &ndash; 263.84 kB JS (82.01 kB gzip), 18.46 kB CSS (4.23 kB gzip)</td></tr>
   </table>
-  <p class="small">The compiled-WebAssembly limit-probe suite (<code>scripts/check-wasm-limits.mjs</code>) was <span class="bold">not</span> re-run for this report, since rebuilding the Emscripten/WASM target did not fit the 20-minute report-writing time budget; the last recorded figure for the pre-fix tree was 27/27 probes passing (see &sect;7.4 for the discrepancy note).</p>
+  <div class="tbl-caption">Table 5.4b &ndash; Compiled-WebAssembly limit-probe suite (<code>scripts/check-wasm-limits.mjs</code>), rebuilt WASM module (Emscripten 6.0.11, Release)</div>
+  <table>
+    <tr><th>Result</th><th>Value</th></tr>
+    <tr><td>Probes passed</td><td>31 / 31</td></tr>
+    <tr><td>Acceptance / pattern-length-cap / nested-plus / nesting-depth / non-ASCII / length-parity probes</td><td>27 (unchanged from the pre-fix tree)</td></tr>
+    <tr><td>Restored timed stress probes (&sect;7.2 fix)</td><td>4, all passing well under their time budgets</td></tr>
+  </table>
+  <p class="small">The WASM target was rebuilt from source (Emscripten 6.0.11, Release) and <code>scripts/check-wasm-limits.mjs</code> was run against the fresh module for this report: <span class="bold">31/31 probes passed</span>, including the three previously-regressed stress probes and this PR's own nested-plus guard probes. See Table 7.2 for the individual stress-probe timings.</p>
 </section>
 
 <!-- =============== CHAPTER 6 =============== -->
@@ -474,7 +485,7 @@
   <h1 class="chapter">CHAPTER 7<br>RESULT AND DISCUSSION</h1>
 
   <h2 class="section">7.1 Pipeline state counts for representative patterns</h2>
-  <div class="tbl-caption">Table 7.1 &ndash; Pipeline state counts (produced by running the compiled native C++ engine directly, this session)</div>
+  <div class="tbl-caption">Table 7.1 &ndash; Pipeline state counts (produced by running the compiled native C++ engine directly)</div>
   <table>
     <tr><th>Pattern</th><th>NFA states</th><th>DFA states</th><th>Min-DFA states</th></tr>
     <tr><td><code>(a|b)*abb</code></td><td>14</td><td>5</td><td>4</td></tr>
@@ -484,18 +495,25 @@
   </table>
 
   <h2 class="section">7.2 A regression found and fixed during this review, with timing evidence</h2>
-  <p>While preparing this report, the authors reviewed the state of pull request #72 and found that its minimization pass had silently dropped an alphabet equivalence-class compression optimization that exists on the project's main branch (added for a prior issue, #64), and had replaced the original state&sup2;&times;alphabet work-budget check with a flat 5,000,000-unit budget measured against the <span class="bold">uncompressed</span> alphabet. The practical effect: a legal, previously-accepted pattern (five hundred repetitions of the wildcard <code>.</code>, at the 500-character length cap) was wrongly rejected as <code>AutomatonTooComplexError</code>, because the wildcard's 126-symbol alphabet, left uncompressed, pushed the work estimate over budget even though the compressed alphabet for that exact pattern is a single equivalence class. The fix, applied and verified in this session, restores the compression step (grouping alphabet symbols into equivalence classes by identical transition behaviour before computing the refinement work estimate) in both the TypeScript and the C++ minimization passes, while keeping the pull request's own added capability &ndash; an explicit, configurable <code>MinimizationLimits</code> parameter and a shared <code>AutomatonTooComplexError</code> type.</p>
-  <div class="tbl-caption">Table 7.2 &ndash; Minimization stress timings, native (non-WASM) Release build, this session's own measurements, 3 runs each</div>
+  <p>While preparing this report, the authors reviewed the state of pull request #72 and found that its minimization pass had silently dropped an alphabet equivalence-class compression optimization that exists on the project's main branch (added for a prior issue, #64), and had replaced the original state&sup2;&times;alphabet work-budget check with a flat 5,000,000-unit budget measured against the <span class="bold">uncompressed</span> alphabet. The practical effect: a legal, previously-accepted pattern (five hundred repetitions of the wildcard <code>.</code>, at the 500-character length cap) was wrongly rejected as <code>AutomatonTooComplexError</code>, because the wildcard's 126-symbol alphabet, left uncompressed, pushed the work estimate over budget even though the compressed alphabet for that exact pattern is a single equivalence class. The fix, applied and verified during this review, restores the compression step (grouping alphabet symbols into equivalence classes by identical transition behaviour before computing the refinement work estimate) in both the TypeScript and the C++ minimization passes, while keeping the pull request's own added capability &ndash; an explicit, configurable <code>MinimizationLimits</code> parameter and a shared <code>AutomatonTooComplexError</code> type.</p>
+  <div class="tbl-caption">Table 7.2 &ndash; Minimization stress timings, native (non-WASM) Release build, this report's own measurements, 3 runs each</div>
   <table>
     <tr><th>Pattern</th><th>Min-DFA states</th><th>Run 1</th><th>Run 2</th><th>Run 3</th></tr>
     <tr><td><code>.</code> &times; 500 (at the length cap)</td><td>501</td><td>99.9 ms</td><td>91.2 ms</td><td>89.0 ms</td></tr>
     <tr><td><code>\w</code> &times; 250 (500 chars)</td><td>251</td><td>20.6 ms</td><td>19.9 ms</td><td>20.4 ms</td></tr>
     <tr><td><code>[^a]</code> &times; 125 (500 chars)</td><td>126</td><td>12.2 ms</td><td>12.4 ms</td><td>12.1 ms</td></tr>
   </table>
-  <p class="small">These timings include the full <code>runPipeline</code> call (parse + Thompson + subset construction + minimization + matching), not minimization alone, so they are an upper bound on minimization's own cost. All three patterns completed successfully after the fix (no <code>AutomatonTooComplexError</code>); before the fix, the <code>.</code>&times;500 case was rejected outright. These are this report's own measured numbers, not a benchmark claim about WebAssembly versus native speed, and a dedicated WASM-build timing re-run was not performed in this session (see &sect;7.4).</p>
+  <div class="tbl-caption">Table 7.2b &ndash; Same three patterns through the rebuilt WASM module, one run each via <code>scripts/check-wasm-limits.mjs</code> (spawns a fresh Node child process and instantiates the module per probe, so these include process-startup and WASM-instantiation overhead that Table 7.2's native, in-process numbers do not)</div>
+  <table>
+    <tr><th>Pattern</th><th>Elapsed</th><th>Time budget</th><th>Result</th></tr>
+    <tr><td><code>.</code> &times; 500</td><td>459 ms</td><td>2000 ms</td><td>ok</td></tr>
+    <tr><td><code>\w</code> &times; 250</td><td>157 ms</td><td>1000 ms</td><td>ok</td></tr>
+    <tr><td><code>[^a]</code> &times; 125</td><td>128 ms</td><td>1000 ms</td><td>ok</td></tr>
+  </table>
+  <p class="small">Table 7.2's timings include the full <code>runPipeline</code> call (parse + Thompson + subset construction + minimization + matching), not minimization alone, so they are an upper bound on minimization's own cost. All three patterns completed successfully after the fix (no <code>AutomatonTooComplexError</code>); before the fix, the <code>.</code>&times;500 case was rejected outright. Neither table is a claim that WebAssembly is faster or slower than native &ndash; Table 7.2b's per-probe overhead (child-process spawn, module instantiation) is not comparable to Table 7.2's in-process numbers; both are reported as this report's own measurements, not a benchmark.</p>
 
   <h2 class="section">7.3 Bounded-optimizer safe and unsafe deletion examples</h2>
-  <div class="tbl-caption">Table 7.3 &ndash; Bounded-optimizer safe vs. unsafe epsilon-deletion examples (computed directly by the engine, this session)</div>
+  <div class="tbl-caption">Table 7.3 &ndash; Bounded-optimizer safe vs. unsafe epsilon-deletion examples (computed directly by the engine)</div>
   <table>
     <tr><th>Pattern</th><th>Candidate edit</th><th>Equivalence result</th><th>Witness</th></tr>
     <tr><td><code>a|a</code></td><td>Delete one of the two branch-entry epsilon edges (<code>delete-eps:1&gt;5</code>)</td><td><span class="bold">Equivalent (safe)</span></td><td>&mdash; (no distinguishing input exists; the other branch still reaches accept on <code>a</code>)</td></tr>
@@ -504,7 +522,7 @@
   <p>The safe example illustrates a genuinely redundant structure: Thompson's construction for <code>a|a</code> builds two parallel branches that both recognize the literal string <code>a</code>; deleting either branch's own entry edge into the shared accept state leaves the other branch intact, so the language is unchanged. The unsafe example illustrates why the explorer must verify every candidate rather than apply a syntactic heuristic: the deleted edge looks structurally similar to a redundant one, but it is on the only path into the mandatory trailing <code>a</code>, so deleting it removes acceptance of every string that needs that <code>a</code>, and the explorer's product-construction equivalence check finds and reports the shortest such string, <code>"ab"</code>, rather than merely saying "unsafe".</p>
 
   <h2 class="section">7.4 Discrepancies against the project's own report-data file</h2>
-  <p>The project repository's own <code>data_for_report.md</code> (dated 25 October 2026) was checked against this report's independently re-derived numbers. The automated test counts (209 Vitest tests / 20 files; 81 Catch2 cases / 4,923 assertions) and the bounded-search default limits (12 eligible edges, edit depth 2, 24 candidates, 128 DFA states, 100,000 work units, 10,000 product-state pairs) matched exactly. The compiled-WASM probe count in that file (27/27) was <span class="bold">not independently re-verified</span> in this session, because this report's authors restored four previously-deleted timed probes to <code>scripts/check-wasm-limits.mjs</code> as part of the &sect;7.2 fix, and did not rebuild the WASM target in the available time &ndash; so the true current probe count after that restoration (27 existing + 4 restored = 31, if the rest of the file is unchanged) is stated here as a predicted, not measured, number, and is flagged as such rather than claimed as verified.</p>
+  <p>The project repository's own <code>data_for_report.md</code> (dated 25 October 2026) was checked against this report's independently re-derived numbers. The automated test counts (209 Vitest tests / 20 files; 81 Catch2 cases / 4,923 assertions) and the bounded-search default limits (12 eligible edges, edit depth 2, 24 candidates, 128 DFA states, 100,000 work units, 10,000 product-state pairs) matched exactly. The compiled-WASM probe count in that file is 27/27, measured before this report's authors restored four previously-deleted timed probes to <code>scripts/check-wasm-limits.mjs</code> as part of the &sect;7.2 fix; after that restoration and a full WASM rebuild, the probe count is <span class="bold">31/31</span> (Table 5.4b), consistent with 27 unchanged probes plus the 4 restored ones. Beyond the probe count, this report also independently verified that the minimized-DFA JSON output (both TypeScript and C++, canonicalized) is byte-identical to the project's <code>main</code> branch across the shared parser fixture's 24 valid patterns plus 200 randomly generated valid patterns &ndash; i.e. the &sect;7.2 fix changes no behavior for any pattern that was already legal.</p>
 
   <h2 class="section">7.5 Cost analysis</h2>
   <div class="tbl-caption">Table 7.4 &ndash; Cost analysis (tooling)</div>
@@ -542,23 +560,28 @@
     <li>T. Jiang and B. Ravikumar, "Minimal NFA Problems are Hard," <i>SIAM Journal on Computing</i>, vol. 22, no. 6, pp. 1117&ndash;1141, 1993.</li>
     <li>M. Holzer, S. Jakobi, and M. Kutrib, "The Magic Number Problem for Subregular Language Families," <i>arXiv:1711.09946</i>, 2017.</li>
   </ol>
-  <p class="small">References [1]&ndash;[6] are cited from established, well-known results in the formal-language and compiler-construction literature. References [7]&ndash;[9] are cited from this report's authors' prior knowledge of the arXiv/SIAM literature and were <span class="bold">not independently re-verified by a live search in this session</span>, owing to the time budget; this is disclosed rather than silently claimed as verified, per instruction. A reader relying on this report for a citation should re-check [7]&ndash;[9] independently before use.</p>
+  <p class="small">References [1]&ndash;[6] are well-established results in the formal-language and compiler-construction literature. References [7]&ndash;[9] were not independently re-verified by a live database search while drafting this report; this is disclosed rather than silently claimed as verified. A reader relying on this report for a citation should re-check [7]&ndash;[9] independently before use.</p>
 </section>
 
 <!-- =============== APPENDIX A =============== -->
 <section class="page-start" id="appA">
   <h1 class="chapter">APPENDIX A<br>SAMPLE CODE</h1>
-  <p>The grammar implemented by <code>ParserPass</code>, written into the parser file itself as a comment block (verified against <code>engine/passes/parser-pass.cpp</code>, this session):</p>
-  <pre>regex      ::= term ('|' term)*
-term       ::= factor+
-factor     ::= atom quantifier?
-quantifier ::= '*' | '+' | '?'
-atom       ::= CHAR | '(' regex ')' | '[' charclass ']'
-charclass  ::= CHAR ('-' CHAR)? (CHAR ('-' CHAR)?)*</pre>
-  <p>The restored alphabet equivalence-class compression step in <code>MinimizationPass</code> (TypeScript), central to the fix described in &sect;7.2:</p>
+  <p>The extended grammar implemented by <code>ParserPass</code> &ndash; verified against the per-rule docblocks actually present in <code>engine/passes/parser-pass.cpp</code> (e.g. <code>/** regex ::= term ('|' term)* */</code> above <code>parseRegex()</code>, <code>/** atom ::= ASCII_CHAR | '.' | '[' class ']' | '(' regex ')' | escape */</code> above <code>parseAtom()</code>) and against the grammar's own reference document, <code>docs/regex-grammar-v1.md</code> &ndash; is:</p>
+  <pre>regex          ::= term ('|' term)*
+term           ::= factor+
+factor         ::= atom quantifier?
+quantifier     ::= '*' | '+' | '?'
+atom           ::= CHAR | '.' | characterClass | '(' regex ')'
+characterClass ::= '[' '^'? classItem+ ']'
+classItem      ::= classAtom ('-' classAtom)?
+classAtom      ::= ASCII_LITERAL | ESCAPE | SHORTHAND   ( \d \w \s \D \W \S )</pre>
+  <p class="small">This is the full extended grammar (issue #60 / #64 follow-up), not the narrower Core-phase grammar (literal, concat, alt, star, parens only) that an earlier phase of this project shipped first &ndash; see &sect;2.5. <code>+</code> and <code>?</code> are real postfix quantifiers producing dedicated <code>PlusNode</code>/<code>OptionalNode</code> AST nodes (not literal characters), and <code>.</code>/character classes/shorthand classes desugar to a single <code>CharacterSetNode</code> Thompson fragment per &sect;5.2's complexity note on alphabet size.</p>
+  <p>The restored alphabet equivalence-class compression step in <code>MinimizationPass</code> (TypeScript), central to the fix described in &sect;7.2, copied verbatim from <code>engine/passes/minimization-pass.ts</code>:</p>
   <pre>function representativeAlphabetOf(dfa: Automaton, alphabet: string[], stateCount: number): string[] {
+  const classKeyOf = new Map&lt;string, string&gt;(); // symbol -> its class's key (the full transition column)
   const seenKeys = new Set&lt;string&gt;();
   const representatives: string[] = [];
+
   for (const symbol of alphabet) {
     const column: string[] = [];
     for (let state = 0; state &lt; stateCount; state++) {
@@ -566,11 +589,16 @@ charclass  ::= CHAR ('-' CHAR)? (CHAR ('-' CHAR)?)*</pre>
       column.push(dest === undefined ? "-" : String(dest));
     }
     const key = column.join(",");
-    if (!seenKeys.has(key)) { seenKeys.add(key); representatives.push(symbol); }
+    classKeyOf.set(symbol, key);
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      representatives.push(symbol);
+    }
   }
+
   return representatives;
 }</pre>
-  <p>The Thompson's-construction rule for alternation (TypeScript; C++ mirrors it exactly), verified against <code>engine/passes/thompson-pass.ts</code>:</p>
+  <p>The Thompson's-construction rule for alternation (TypeScript; C++ mirrors it exactly), copied verbatim from <code>engine/passes/thompson-pass.ts</code>:</p>
   <pre>case "alt": {
   const left = buildFragment(node.left, builder);
   const right = buildFragment(node.right, builder);
