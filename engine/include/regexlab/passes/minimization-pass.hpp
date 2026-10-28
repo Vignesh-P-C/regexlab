@@ -22,7 +22,9 @@ namespace regexlab {
  */
 struct MinimizationLimits {
     std::size_t maxDfaStates = 20000;
-    std::size_t maxWorkUnits = 5000000;
+    // ~9.27M measured pre-compression, rounded down to 10M for margin — see
+    // minimization-pass.cpp's work-budget comment for the full derivation.
+    std::size_t maxWorkUnits = 10000000;
 };
 
 /**

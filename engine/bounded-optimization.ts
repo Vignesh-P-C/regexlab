@@ -38,6 +38,12 @@ const HARD_LIMITS: BoundedSearchLimits = {
   maxProductStatePairs: 20_000,
 };
 
+// Only a real `undefined` (the caller didn't specify this limit at all)
+// falls back to the default; an explicit 0 is a real request and clamps to
+// the minimum valid value of 1. This deliberately differs from the WASM
+// bridge's runBoundedOptimizationJson (engine/json_bridge.cpp), which has no
+// `undefined` to work with across the Embind boundary and uses "<= 0" as its
+// own stand-in for "not specified" instead -- see that function's comment.
 function boundedInteger(value: number | undefined, fallback: number, maximum: number): number {
   if (value === undefined || !Number.isFinite(value)) return fallback;
   return Math.max(1, Math.min(maximum, Math.trunc(value)));

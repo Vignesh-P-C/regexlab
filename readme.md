@@ -98,6 +98,7 @@ regexlab/
 │   ├── equivalence.{ts,cpp}                  # 🆕 #68 PR A: reusable exact-equivalence verifier (product BFS, shortest witness)
 │   ├── growth-analysis.{ts,cpp}              # 🆕 #68 PR A: growth analysis and exact candidate verification
 │   ├── bounded-optimization.{ts,cpp}          # 🆕 B: deterministic bounded search over epsilon-deletion candidates
+│   ├── resource-limits.ts                     # 🆕 B: shared MAX_NFA_STATES / MAX_MINIMIZATION_WORK_UNITS / AutomatonTooComplexError
 │   ├── include/regexlab/
 │   │   ├── types.hpp                         # ✅ C++ data contracts
 │   │   ├── growth-types.hpp                  # 🆕 #68 PR A + B: C++ growth and search contracts
@@ -134,6 +135,7 @@ regexlab/
 │   │   │   ├── steps.ts                      # AST and automaton playback traces
 │   │   │   ├── transition-label-layout.ts    # estimates label bounds and routes around nodes, labels, and edges
 │   │   │   │                                  # geometry regressions: transition-label-layout.test.ts
+│   │   │   ├── nfa-fragment-layout.ts         # computes the textbook Thompson-fragment NFA diagram layout
 │   │   │   └── growth.ts                     # 🆕 #68 PR A: lists eligible ε-edges from the JSON Automaton for the what-if panel
 │   │   └── components/                       # GrowthPanel (A) + BoundedOptimizationExplorer (B); SuggestionBanner remains unwired
 │   └── public/wasm/                          # regexlab.js + regexlab.wasm go here (built locally, not committed)
