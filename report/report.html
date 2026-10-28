@@ -504,14 +504,16 @@
   <h1 class="chapter">CHAPTER 7<br>RESULT AND DISCUSSION</h1>
 
   <h2 class="section">7.1 Pipeline state counts for representative patterns</h2>
+  <p>This table doubles as the Subset Growth / NFA Structure Lab's own worked example: the powerset ceiling column is the theoretical maximum number of DFA states subset construction could ever produce from that NFA (2<sup>NFA&nbsp;states</sup>), set directly against the reachable DFA states subset construction actually built. Seeing how far short of the ceiling the real engine lands, every single time, is the whole point of exposing this measurement to a learner rather than only the final minimized DFA.</p>
   <div class="tbl-caption">Table 7.1 &ndash; Pipeline state counts (produced by running the compiled native C++ engine directly)</div>
   <table>
-    <tr><th>Pattern</th><th>NFA states</th><th>DFA states</th><th>Min-DFA states</th></tr>
-    <tr><td><code>(a|b)*abb</code></td><td>14</td><td>5</td><td>4</td></tr>
-    <tr><td><code>a+</code></td><td>5</td><td>3</td><td>2</td></tr>
-    <tr><td><code>a?</code></td><td>4</td><td>2</td><td>2</td></tr>
-    <tr><td><code>[a-c]+</code></td><td>5</td><td>3</td><td>2</td></tr>
+    <tr><th>Pattern</th><th>NFA states</th><th>Powerset ceiling (2<sup>NFA</sup>)</th><th>Reachable DFA states</th><th>Min-DFA states</th></tr>
+    <tr><td><code>(a|b)*abb</code></td><td>14</td><td>16,384</td><td>5</td><td>4</td></tr>
+    <tr><td><code>a+</code></td><td>5</td><td>32</td><td>3</td><td>2</td></tr>
+    <tr><td><code>a?</code></td><td>4</td><td>16</td><td>2</td><td>2</td></tr>
+    <tr><td><code>[a-c]+</code></td><td>5</td><td>32</td><td>3</td><td>2</td></tr>
   </table>
+  <p class="small">For <code>(a|b)*abb</code>: subset construction reaches 5 of a theoretically possible 16,384 states, roughly 0.03% of the ceiling, and Moore's minimization then collapses those 5 down to 4. That gap between 16,384 and 5 is the exponential blow-up named honestly in Table 5.2, shown concretely rather than only asserted.</p>
 
   <h2 class="section">7.2 A regression found and fixed during this review, with timing evidence</h2>
   <p>While reviewing pull request #72, we found that its minimization pass had quietly lost an alphabet equivalence-class compression optimization that already exists on the project's main branch, added earlier for issue #64. In its place sat a flat 5,000,000-unit work budget checked against the <span class="bold">uncompressed</span> alphabet instead of the compressed one. In practice this meant a perfectly legal pattern, five hundred repetitions of the wildcard <code>.</code> sitting right at the 500-character length cap, got wrongly rejected as <code>AutomatonTooComplexError</code>. The wildcard's alphabet has 126 symbols, and left uncompressed that pushed the work estimate over budget, even though every one of those 126 symbols collapses into a single equivalence class once you actually compress them. We restored the compression step, which groups alphabet symbols by identical transition behaviour before the work estimate is computed, in both the TypeScript and the C++ minimization passes, and kept everything the pull request itself had added: the configurable <code>MinimizationLimits</code> parameter and the shared <code>AutomatonTooComplexError</code> type.</p>
