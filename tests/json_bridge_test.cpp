@@ -231,6 +231,22 @@ TEST_CASE("json_bridge — verifyCandidate reports the 'a*' skip-edge deletion a
     REQUIRE(eq["witness"]["candidateAccepts"].get<bool>() == false);
 }
 
+TEST_CASE("json_bridge -- verifyCandidate rejects an edge that doesn't exist in the baseline NFA",
+          "[json_bridge][growth][limits]") {
+    // "a*" has 4 states (0-3, see the test above) and no edge anywhere near
+    // (99, 100). Before this guard, applyCandidateEdit() would silently
+    // no-op on an edge it can't find, producing a "candidate" NFA identical
+    // to the baseline -- which checkEquivalence then reports as
+    // "equivalent", falsely implying a verified, safe deletion when nothing
+    // was actually deleted. The bridge must reject the request outright
+    // instead, the same way verifyCandidateEdgesJson already does for its
+    // own (batch) input.
+    std::string raw = verifyCandidateJson("a*", 99, 100);
+    json j = json::parse(raw);
+    REQUIRE(j["ok"].get<bool>() == false);
+    REQUIRE(j["error"]["type"].get<std::string>() == "InvalidCandidateEdit");
+}
+
 TEST_CASE("json_bridge complexity caps return a structured error on every pattern entry point", "[json_bridge][limits]") {
     std::string pattern = "a+";
     for (int depth = 0; depth < 12; ++depth) pattern = "(" + pattern + ")+";
@@ -257,7 +273,7 @@ TEST_CASE("json_bridge -- minimization safety guard still fires on a non-compres
     // is exactly the adversarial shape representativeAlphabetOf's own comment
     // names as the case compression buys nothing for. The default work
     // budget (state-count^2 * alphabet size, post-compression) still has to
-    // catch it: 501^2 * 79 ~= 19.8M, well over the 5,000,000-unit default.
+    // catch it: 501^2 * 79 ~= 19.8M, well over the 10,000,000-unit default.
     // This guards against ever losing the compression fix silently again --
     // without it, this same pattern would instead cost 501^2 * 79 work units
     // measured against an uncompressed alphabet that happens to equal the

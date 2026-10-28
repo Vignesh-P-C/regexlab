@@ -189,11 +189,20 @@ export function minimize(dfa: Automaton, limits: MinimizationLimits = DEFAULT_MI
    * (MAX_MINIMIZATION_WORK_UNITS, resource-limits.ts): the engine's alphabet
    * is ASCII-only (at most 128 symbols, CLAUDE.md §10), so even the
    * fully-adversarial case can't push alphabetSize past 128. Measured on the
-   * WASM build pre-compression (issue #64 follow-up): stateCount=501,
-   * alphabetSize=126 (a `.` x500 chain) cost ~6793ms. Post-compression, the
-   * same `.` x500 case costs 500^2 * 1 = 250,000 work units — far under the
-   * budget — while a 128-symbol, zero-compression, 500-state adversarial
-   * case (500^2 * 128 = 32,000,000) is still caught well before it would run.
+   * WASM build pre-compression (Stage 1 of the issue #64 follow-up review):
+   * stateCount=501, alphabetSize=126 (a `.` x500 chain) cost ~6793ms, i.e.
+   * ~4637 (stateCount^2 * alphabetSize) units per millisecond. Capping
+   * worst-case synchronous blocking at ~2s on that same hardware gives
+   * 2000ms * 4637 ~= 9.27M; rounded down to 10,000,000 for margin. This is
+   * restored from main's own measured value — a prior revision of this pass
+   * silently halved it to 5,000,000 with no re-derivation, which would
+   * reject a legitimate, moderately-complex pattern well within the
+   * fully-adversarial case this budget is sized for (e.g. stateCount~300,
+   * alphabetSize~60 costs 5.4M, comfortably under 10M but over 5M).
+   * Post-compression, the `.` x500 case now costs 500^2 * 1 = 250,000 work
+   * units — far under the budget — while a 128-symbol, zero-compression,
+   * 500-state adversarial case (500^2 * 128 = 32,000,000) is still caught
+   * well before it would run.
    */
   const work = dfa.stateCount * dfa.stateCount * representatives.length;
   if (work > limits.maxWorkUnits) {
