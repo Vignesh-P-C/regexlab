@@ -97,6 +97,15 @@ check("alternation 251 terms (501 chars)", Array(251).fill("a").join("|"), "a", 
 check("star chain x250 (500 chars)", "a*".repeat(250), "a", "ok");
 check("star chain x251 (502 chars)", "a*".repeat(251), "a", "PatternTooComplex@500");
 
+console.log("\n-- NFA expansion guard for nested plus --");
+function nestedPlus(depth) {
+  let pattern = "a+";
+  for (let i = 0; i < depth; i++) pattern = `(${pattern})+`;
+  return pattern;
+}
+check("nested plus above NFA cap", nestedPlus(12), "a", "AutomatonTooComplex@0");
+check("nested plus below NFA cap", nestedPlus(8), "a", "ok");
+
 console.log("\n-- nesting: the 500-char cap fires before the depth-1000 guard --");
 // 249 pairs + 'a' = 499 chars (allowed); 250 pairs = 501 chars (over the cap).
 check("nested depth 100", "(".repeat(100) + "a" + ")".repeat(100), "a", "ok");

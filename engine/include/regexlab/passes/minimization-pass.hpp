@@ -6,33 +6,32 @@
 // refinement — see minimization-pass.cpp for the full algorithm notes,
 // identical to the TS version.
 
-#include <exception>
+#include <cstddef>
 
 #include "regexlab/types.hpp"
 
 namespace regexlab {
 
-// Thrown by minimize() when its work-budget safety net trips (see
-// minimization-pass.cpp for the threshold and its derivation). Mirrors
-// parser-pass.cpp's internal ParseFailure pattern, but is exposed here
-// (rather than kept in an anonymous namespace) because pipeline.cpp needs
-// to catch it across the call.
-class MinimizationTooComplex : public std::exception {
-public:
-    explicit MinimizationTooComplex(ParseError error) : error_(std::move(error)) {}
-    const ParseError& error() const { return error_; }
-    const char* what() const noexcept override { return "minimization work budget exceeded"; }
-
-private:
-    ParseError error_;
+/**
+ * Deterministic state/work caps for Moore refinement. maxDfaStates is a
+ * cheap up-front size guard; maxWorkUnits backstops the refinement cost
+ * itself (stateCount^2 * alphabetSize AFTER alphabet-equivalence-class
+ * compression — see minimization-pass.cpp's comment above that check for
+ * the full derivation). minimize() throws AutomatonTooComplexError if
+ * either limit is exceeded.
+ */
+struct MinimizationLimits {
+    std::size_t maxDfaStates = 20000;
+    // ~9.27M measured pre-compression, rounded down to 10M for margin — see
+    // minimization-pass.cpp's work-budget comment for the full derivation.
+    std::size_t maxWorkUnits = 10000000;
 };
 
 /**
- * MinimizationPass entry point: DFA in, minimal DFA out (Moore's algorithm).
- * Throws MinimizationTooComplex if the estimated refinement work
- * (stateCount^2 * post-compression alphabet size) exceeds the safety-net
- * budget — see minimization-pass.cpp.
+ * MinimizationPass entry point: DFA in, minimal DFA out (Moore's
+ * algorithm), subject to the explicit limits (default-constructed
+ * MinimizationLimits if the caller doesn't need to override them).
  */
-Automaton minimize(const Automaton& dfa);
+Automaton minimize(const Automaton& dfa, const MinimizationLimits& limits = {});
 
 }  // namespace regexlab

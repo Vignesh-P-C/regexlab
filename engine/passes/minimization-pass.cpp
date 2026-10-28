@@ -137,59 +137,67 @@ RefineResult refine(const std::vector<std::vector<int>>& groups, const Automaton
     return {newGroups, changed};
 }
 
-/**
- * refine()'s per-state signature loop runs once per fixpoint round (up to
- * stateCount rounds), so its real cost is stateCount^2 * alphabetSize —
- * fine for a handful of symbols, not fine for a `.`-heavy pattern whose
- * alphabet is however many distinct ASCII codes its character classes
- * cover (up to 126). Alphabet compression (above) usually drives that
- * down to ~1 for a single repeated class, but a pattern can still be
- * constructed where every symbol's transition column really is distinct
- * (no two symbols ever collapse) — e.g. a long concatenation of distinct
- * single-character literals, where each literal is "live" at exactly one
- * unique state and so is never redundant with any other. For that
- * adversarial shape, compression buys nothing and the cost is still
- * stateCount^2 * alphabetSize.
- *
- * This threshold is a backstop against that shape, not the primary fix —
- * the primary fix is the compression above. Derivation: the engine's
- * alphabet is ASCII-only (at most 128 symbols, CLAUDE.md §10), so even the
- * fully-adversarial case can't push alphabetSize past 128. Measured on the
- * WASM build pre-compression (Stage 1 of the issue #64 follow-up review):
- * stateCount=501, alphabetSize=126 (a `.` x500 chain) cost ~6793ms, i.e.
- * ~4637 (stateCount^2 * alphabetSize) units per millisecond. Capping
- * worst-case synchronous blocking at ~2s on that same hardware gives
- * 2000ms * 4637 ~= 9.27M; rounded down for margin. Post-compression, the
- * same `.` x500 case now costs 500^2 * 1 = 250,000 — 40x under this
- * threshold — while a 128-symbol, zero-compression, 500-state adversarial
- * case (500^2 * 128 = 32,000,000) is caught well before it would run.
- */
-constexpr long long kMaxMinimizationWork = 10'000'000;
-
 }  // namespace
 
-Automaton minimize(const Automaton& dfa) {
+Automaton minimize(const Automaton& dfa, const MinimizationLimits& limits) {
+    if (dfa.stateCount < 0 || static_cast<std::size_t>(dfa.stateCount) > limits.maxDfaStates) {
+        throw AutomatonTooComplexError(
+            "DFA minimization received " + std::to_string(dfa.stateCount) +
+            " states, above its safety limit of " + std::to_string(limits.maxDfaStates) + ".");
+    }
+
     std::vector<std::string> alphabet = alphabetOf(dfa);
     std::vector<std::string> representatives = representativeAlphabetOf(dfa, alphabet, dfa.stateCount);
 
-    long long work = static_cast<long long>(dfa.stateCount) * dfa.stateCount *
-                      static_cast<long long>(representatives.size());
-    if (work > kMaxMinimizationWork) {
-        throw MinimizationTooComplex(ParseError{
-            ParseErrorType::AutomatonTooComplex, 0,
-            std::string("stateCount^2 * alphabetSize <= ") + std::to_string(kMaxMinimizationWork),
-            std::string("stateCount=") + std::to_string(dfa.stateCount) +
-                ", alphabetSize=" + std::to_string(representatives.size()) +
-                " (stateCount^2 * alphabetSize = " + std::to_string(work) + ")"});
+    // refine()'s per-state signature loop runs once per fixpoint round (up
+    // to stateCount rounds), so its real cost is stateCount^2 * alphabetSize
+    // — fine for a handful of symbols, not fine for a `.`-heavy pattern
+    // whose alphabet is however many distinct ASCII codes its character
+    // classes cover (up to 126). Alphabet compression (above) usually
+    // drives that down to ~1 for a single repeated class, but a pattern can
+    // still be constructed where every symbol's transition column really is
+    // distinct (e.g. a long concatenation of distinct single-character
+    // literals) — for that adversarial shape, compression buys nothing and
+    // the cost is still stateCount^2 * alphabetSize.
+    //
+    // This check is a backstop against that shape, not the primary fix —
+    // the primary fix is the compression above, which is why the estimate
+    // uses representatives.size() (the alphabet size AFTER compression),
+    // not alphabet.size(). Derivation of the default budget
+    // (MinimizationLimits::maxWorkUnits): the engine's alphabet is
+    // ASCII-only (at most 128 symbols, CLAUDE.md §10), so even the
+    // fully-adversarial case can't push alphabetSize past 128. Measured on
+    // the WASM build pre-compression (Stage 1 of the issue #64 follow-up
+    // review): stateCount=501, alphabetSize=126 (a `.` x500 chain) cost
+    // ~6793ms, i.e. ~4637 (stateCount^2 * alphabetSize) units per
+    // millisecond. Capping worst-case synchronous blocking at ~2s on that
+    // same hardware gives 2000ms * 4637 ~= 9.27M; rounded down to
+    // 10,000,000 for margin. This is restored from main's own measured
+    // value — a prior revision of this pass silently halved it to
+    // 5,000,000 with no re-derivation, which would reject a legitimate,
+    // moderately-complex pattern well within the fully-adversarial case
+    // this budget is sized for (e.g. stateCount~300, alphabetSize~60 costs
+    // 5.4M, comfortably under 10M but over 5M). Post-compression, the `.`
+    // x500 case now costs 500^2 * 1 = 250,000 work units — far under the
+    // budget — while a 128-symbol, zero-compression, 500-state adversarial
+    // case (500^2 * 128 = 32,000,000) is still caught well before it would
+    // run.
+    const unsigned long long work = static_cast<unsigned long long>(dfa.stateCount) *
+                                     static_cast<unsigned long long>(dfa.stateCount) *
+                                     static_cast<unsigned long long>(representatives.size());
+    if (work > static_cast<unsigned long long>(limits.maxWorkUnits)) {
+        throw AutomatonTooComplexError(
+            "DFA minimization exceeded its safety limit of " +
+            std::to_string(limits.maxWorkUnits) + " work units.");
     }
 
     std::vector<int> allStates(dfa.stateCount);
     for (int i = 0; i < dfa.stateCount; ++i) allStates[i] = i;
 
     std::vector<int> accepting, nonAccepting;
-    for (int s : allStates) {
-        if (dfa.acceptStates.count(s)) accepting.push_back(s);
-        else nonAccepting.push_back(s);
+    for (int state : allStates) {
+        if (dfa.acceptStates.count(state)) accepting.push_back(state);
+        else nonAccepting.push_back(state);
     }
 
     // Coarsest safe starting partition: non-accepting vs accepting (skip empty groups).
@@ -240,6 +248,10 @@ Automaton minimize(const Automaton& dfa) {
         int representative = groups[groupIndex][0];  // any member; refinement guarantees they all agree
         int currentId = idFor(groupIndex);
 
+        // Uses the FULL alphabet, not the compressed representatives — the
+        // minimized DFA's own transition table still needs an entry for
+        // every symbol that had one; representatives are only ever a
+        // shortcut for computing the partition, not part of the output.
         for (const std::string& symbol : alphabet) {
             auto stateIt = dfa.transitions.find(representative);
             if (stateIt == dfa.transitions.end()) continue;

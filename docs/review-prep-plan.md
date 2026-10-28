@@ -12,7 +12,7 @@ pattern text  ──Parser──▶  AST  ──Thompson──▶  NFA (ε moves
                                                   DFA
                                                    │
                                            Moore Minimization
-                                                   ▼
+                                                   ▼thompsonConstruction
                                                min-DFA
                                                    │
                                      test string ──Matcher──▶  match / no-match
@@ -61,20 +61,43 @@ Why: `(a|b)*` eats any mix of `a`/`b` for free, so only the ending matters. `bab
 
 No separate lexer/scanner file exists anywhere in `engine/` (checked directly). Fine for this grammar specifically, since every token is one character; a language with multi-character tokens would need a real lexical-analysis pass first.
 
-## (d) 12 hardest questions
+## Hard Questions
 
-1. **Why Thompson's construction and not the direct method?** Indirect route (regex→NFA→DFA). Direct method (firstpos/followpos, no intermediate NFA) was a real proposal, scoped out on purpose (issues #43/#44), not forgotten. Its real advantage is skipping the epsilon-closure step entirely.
-2. **Subset construction can blow up exponentially: what's your guard status?** Worst case O(2^m). We don't have a dedicated state-count guard on `main`; the 500-char pattern cap bounds NFA size indirectly, but that's not a tight bound on DFA blowup specifically. Stated honestly as a limitation, not hidden. Every DFA state subset construction creates is reachable from the start by construction, since the worklist begins at `ε-closure({nfa.startState})` and only ever discovers a new state via a real `move`+`ε-closure` transition from an already-reachable one, so there's never an unreachable state to prune, in the DFA or downstream in Moore's minimization.
-3. **Moore's vs Hopcroft's?** Moore's: O(n²·k) time, simpler to implement and explain. Hopcroft's: O(n log n·k), faster but fiddlier. Built Moore's first, Hopcroft's deliberately gated as a later upgrade, never started. One correction: the space column for Moore's was wrong in CLAUDE.md. `refine()` builds a length-k signature per state on every pass, so the real working space is O(n·k), states times alphabet size, not O(n); that's now fixed in CLAUDE.md §10.
-4. **Partial DFA and the dead state?** We only record a transition when one exists; a missing transition means reject. No explicit trap state, confirmed directly in the code: `if (moved.size === 0) continue`.
-5. **Full match or search?** Full match, like `std::regex_match`. Whole string consumed, must end in an accept state.
-6. **Why recursive descent, and your grammar/precedence?** Grammar is tiny; recursive descent gives exact error positions and needs no generator tool. Precedence by call depth: `regex` calls `term` calls `factor` calls `atom`, deepest binds tightest, no table. This grammar is genuinely LL(1), not just asserted: FIRST(atom) is every pattern character except `|`, `*`, `)`, and FIRST(term) = FIRST(regex) = FIRST(atom); FOLLOW(term) = {`|`, `)`, end-of-input}. The two EBNF loops (`('|' term)*` and `factor+`) each decide on one lookahead token that's provably disjoint from the other branch's FIRST set. `|` is never in FIRST(term), and the loop-stop tokens are never in FIRST(factor), so one token of lookahead always determines the next move, which is exactly the LL(1) condition.
-7. **What does `(a*)*` do to epsilon loops?** It's fine: the inner `a*` already accepts empty, and the outer `*` adds another skip/loop epsilon pair. More states, not a correctness issue. It does create a real cycle in the NFA's epsilon graph (the inner star's accept→start edge plus the outer star's own edges loop back on each other), but `epsilonClosure` is cycle-safe by construction: it's a worklist walk over a visited set (`closure.has(target)` in TS, an `unordered_set` in C++), so an already-seen state is never pushed again and the closure always terminates in at most `|NFA states|` steps.
-8. **What don't you support, and why?** `+`/`?`/character classes are literal characters today, scoped out on purpose, not built. Backreferences/lookahead are permanently out: not regular languages, no DFA exists for them.
-9. **How do you prove correctness?** Differential testing: thousands of random (pattern, string) pairs checked against `std::regex` and native `RegExp`, in two independent implementations that must agree. 125 TS tests, 4,608 C++ assertions, measured fresh today. One limit worth naming unprompted: differential testing only exercises valid patterns, since `std::regex`/`RegExp` can't serve as an oracle for rejection, so it never touches the `ParseError` code paths. Those are covered separately: 9 golden `ParseError`-shape tests in `parser-pass.test.ts`/`parser_pass_test.cpp`, plus the 36-case shared fixture (`tests/fixtures/parser-cases.json`, read by both `parser-cases.test.ts` and `parser_cases_fixture_test.cpp`) that checks error type/position/expected/found parity between both parsers.
-10. **Why C++/WASM when TypeScript already worked?** Matches the lab's own language convention, and gives a real two-implementation correctness story, since a bug must reproduce in two languages to slip through.
-11. **Is the minimal DFA unique?** Yes, up to renaming, by the Myhill–Nerode theorem.
-12. **What is epsilon-closure, simply?** Every state reachable using only epsilon moves, including the start set itself. It's what lets one DFA state represent "everywhere I could be right now."
+1. **Why Thompson’s construction instead of the direct method?**  
+   We chose Thompson’s construction because it exposes the ε-NFA as an intermediate stage that we can explain and visualize. The direct followpos method builds the DFA without that NFA, so it avoids ε-closure work. We considered the direct method but scoped it out.
+
+2. **Subset construction can grow exponentially. What’s our guard?**  
+   With *m* NFA states, there can be up to 2ᵐ DFA subsets. We have no dedicated DFA-state-count cap. The 500-character pattern limit bounds input size, but doesn’t guarantee a safe bound on DFA growth. Our worklist discovers only subsets reachable from the start state.
+
+3. **Why Moore’s algorithm instead of Hopcroft’s?**  
+   Moore’s algorithm is simpler to implement and explain. Its time bound is O(n²k), compared with Hopcroft’s O(n log n · k). Our implementation uses O(nk) working space for state-transition signatures.
+
+4. **Why use a partial DFA without a dead state?**  
+   A missing transition means reject, so we omit the explicit trap state. This keeps the automaton smaller. We could add a sink state if a later operation required a complete DFA.
+
+5. **Does the matcher do full matching or search?**  
+   It does full matching: it must consume the entire input and finish in an accepting state. It doesn’t search for a matching substring.
+
+6. **Why recursive descent? Is the grammar LL(1)?**  
+   The grammar is small, and recursive descent lets us control error positions without a parser generator. The call structure sets precedence: `*`, then concatenation, then `|`. For valid input, one lookahead character tells the parser whether to continue a construct or stop. We don’t build an LL(1) parsing table.
+
+7. **What happens with `(a*)*` and ε-cycles?**  
+   It creates ε-cycles, but ε-closure tracks visited states, so it won’t revisit states forever. The closure terminates. The nested stars add states and ε-edges, but still represent a valid regular language.
+
+8. **What syntax do we support?**  
+   Our core operators are grouping, concatenation, `|`, and `*`, with literal characters and escapes. `+`, `?`, and character-class brackets are literals, not operators. Backreferences are excluded because they can exceed finite-state recognition. Lookahead is out of scope, though lookahead itself isn’t always non-regular.
+
+9. **How do we check correctness?**  
+   We use unit and shared-fixture tests, plus differential tests: the C++ matcher is compared with `std::regex`, and the TypeScript matcher with JavaScript `RegExp`, over generated cases in the supported syntax. These tests find disagreements; they aren’t a proof and don’t validate parser errors. Invalid-pattern errors have separate tests. The recorded suite has 125 TypeScript tests and 4,608 C++ assertions.
+
+10. **Why C++ and WebAssembly when we also have TypeScript?**  
+    The C++20 engine is the browser’s production engine, compiled to WebAssembly. We keep the TypeScript implementation as a prototype and reference. Having both gives us another implementation to cross-check, but it also means we must maintain two codepaths.
+
+11. **Is the minimal DFA unique?**  
+    For a given regular language, the minimal complete DFA is unique up to renaming its states. Our DFA omits the dead state, which can be treated as implicit.
+
+12. **What is ε-closure?**  
+    It’s the starting set plus every state reachable from it using only ε-transitions, without consuming input.
 
 ## (e) Testing summary: real counts, measured today
 

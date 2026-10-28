@@ -28,11 +28,13 @@ struct WorkBudget {
     std::size_t remaining;
 };
 
-struct BudgetExceeded {};
+struct BudgetExceeded {
+    std::string message;
+};
 
 void accountWork(WorkBudget* budget, std::size_t amount = 1) {
     if (!budget) return;
-    if (amount > budget->remaining) throw BudgetExceeded{};
+    if (amount > budget->remaining) throw BudgetExceeded{"work-unit limit exceeded"};
     budget->remaining -= amount;
 }
 
@@ -79,7 +81,10 @@ std::unordered_set<int> move(const Automaton& nfa, const std::unordered_set<int>
         for (const auto& [label, targets] : stateIt->second) {
             accountWork(budget);
             if (transitionMatches(label, symbol[0])) {
-                for (int target : targets) result.insert(target);
+                for (int target : targets) {
+                    accountWork(budget);
+                    result.insert(target);
+                }
             }
         }
     }
@@ -141,7 +146,7 @@ Automaton subsetConstructionImpl(const Automaton& nfa, WorkBudget* budget,
         std::string key = setKey(nfaStateSet, budget);
         auto it = idBySetKey.find(key);
         if (it != idBySetKey.end()) return it->second;
-        if (budget && stateSets.size() >= maxDfaStates) throw BudgetExceeded{};
+        if (budget && stateSets.size() >= maxDfaStates) throw BudgetExceeded{"DFA-state limit exceeded"};
         int id = static_cast<int>(stateSets.size());
         idBySetKey[key] = id;
         stateSets.push_back(nfaStateSet);
@@ -194,8 +199,15 @@ Automaton subsetConstructionImpl(const Automaton& nfa, WorkBudget* budget,
 }
 }  // namespace
 
-Automaton subsetConstruction(const Automaton& nfa) {
-    return subsetConstructionImpl(nfa, nullptr, 0);
+Automaton subsetConstruction(const Automaton& nfa, const SubsetConstructionLimits& limits) {
+    const std::optional<Automaton> dfa = subsetConstructionBounded(nfa, limits);
+    if (!dfa) {
+        throw AutomatonTooComplexError(
+            "DFA determinization exceeded its safety limits of " +
+            std::to_string(limits.maxDfaStates) + " states or " +
+            std::to_string(limits.maxWorkUnits) + " work units.");
+    }
+    return *dfa;
 }
 
 std::optional<Automaton> subsetConstructionBounded(
@@ -217,88 +229,101 @@ std::vector<int> sortedStates(const std::unordered_set<int>& states) {
 }
 }  // namespace
 
-TracedSubsetConstruction subsetConstructionTraced(const Automaton& nfa) {
-    std::vector<std::string> alphabet = alphabetOf(nfa);
+TracedSubsetConstruction subsetConstructionTraced(
+    const Automaton& nfa, const SubsetConstructionLimits& limits, std::size_t maxTraceSteps) {
+    if (limits.maxDfaStates == 0) {
+        throw AutomatonTooComplexError("Growth Lab determinization requires room for at least one DFA state.");
+    }
+    WorkBudget budget{limits.maxWorkUnits};
+    try {
+        std::vector<std::string> alphabet = alphabetOf(nfa, &budget);
 
-    std::vector<std::unordered_set<int>> stateSets;
-    std::unordered_map<std::string, int> idBySetKey;
-    std::unordered_map<int, std::unordered_map<std::string, std::vector<int>>> transitions;
-    std::vector<SubsetConstructionStep> steps;
+        std::vector<std::unordered_set<int>> stateSets;
+        std::unordered_map<std::string, int> idBySetKey;
+        std::unordered_map<int, std::unordered_map<std::string, std::vector<int>>> transitions;
+        std::vector<SubsetConstructionStep> steps;
 
-    auto idFor = [&](const std::unordered_set<int>& nfaStateSet) -> std::pair<int, bool> {
-        std::string key = setKey(nfaStateSet);
-        auto it = idBySetKey.find(key);
-        if (it != idBySetKey.end()) return {it->second, false};
-        int id = static_cast<int>(stateSets.size());
-        idBySetKey[key] = id;
-        stateSets.push_back(nfaStateSet);
-        return {id, true};
-    };
+        auto idFor = [&](const std::unordered_set<int>& nfaStateSet) -> std::pair<int, bool> {
+            std::string key = setKey(nfaStateSet, &budget);
+            auto it = idBySetKey.find(key);
+            if (it != idBySetKey.end()) return {it->second, false};
+            if (stateSets.size() >= limits.maxDfaStates) throw BudgetExceeded{"DFA-state limit exceeded"};
+            int id = static_cast<int>(stateSets.size());
+            idBySetKey[key] = id;
+            stateSets.push_back(nfaStateSet);
+            return {id, true};
+        };
 
-    int startState = idFor(epsilonClosure(nfa, {nfa.startState})).first;
+        int startState = idFor(epsilonClosure(nfa, {nfa.startState}, &budget)).first;
 
-    std::unordered_set<int> processed;
-    std::vector<int> worklist = {startState};
+        std::unordered_set<int> processed;
+        std::vector<int> worklist = {startState};
 
-    while (!worklist.empty()) {
-        int current = worklist.back();
-        worklist.pop_back();
-        if (processed.count(current)) continue;
-        processed.insert(current);
+        while (!worklist.empty()) {
+            int current = worklist.back();
+            worklist.pop_back();
+            if (processed.count(current)) continue;
+            processed.insert(current);
 
-        for (const std::string& symbol : alphabet) {
-            const std::unordered_set<int> sourceNfaStates = stateSets[current];
-            std::unordered_set<int> moved = move(nfa, sourceNfaStates, symbol);
-            if (moved.empty()) continue;
+            for (const std::string& symbol : alphabet) {
+                accountWork(&budget);
+                const std::unordered_set<int> sourceNfaStates = stateSets[current];
+                std::unordered_set<int> moved = move(nfa, sourceNfaStates, symbol, &budget);
+                if (moved.empty()) continue;
 
-            std::unordered_set<int> closure = epsilonClosure(nfa, moved);
-            auto [targetId, isNew] = idFor(closure);
-            bool isAccepting = false;
-            for (int s : closure) {
-                if (nfa.acceptStates.count(s)) {
-                    isAccepting = true;
+                std::unordered_set<int> closure = epsilonClosure(nfa, moved, &budget);
+                auto [targetId, isNew] = idFor(closure);
+                accountWork(&budget, closure.size());
+                bool isAccepting = false;
+                for (int state : closure) {
+                    if (nfa.acceptStates.count(state)) {
+                        isAccepting = true;
+                        break;
+                    }
+                }
+                if (steps.size() >= maxTraceSteps) throw BudgetExceeded{"subset-trace step limit exceeded"};
+
+                SubsetConstructionStep step;
+                step.sourceId = current;
+                step.sourceNfaStates = sortedStates(sourceNfaStates);
+                step.symbol = symbol;
+                step.moveNfaStates = sortedStates(moved);
+                step.closureNfaStates = sortedStates(closure);
+                step.targetId = targetId;
+                step.isNew = isNew;
+                step.isAccepting = isAccepting;
+                steps.push_back(std::move(step));
+
+                transitions[current][symbol] = {targetId};
+                if (!processed.count(targetId)) worklist.push_back(targetId);
+            }
+        }
+
+        std::unordered_set<int> acceptStates;
+        for (size_t dfaId = 0; dfaId < stateSets.size(); ++dfaId) {
+            accountWork(&budget, stateSets[dfaId].size());
+            for (int nfaState : stateSets[dfaId]) {
+                if (nfa.acceptStates.count(nfaState)) {
+                    acceptStates.insert(static_cast<int>(dfaId));
                     break;
                 }
             }
-
-            SubsetConstructionStep step;
-            step.sourceId = current;
-            step.sourceNfaStates = sortedStates(sourceNfaStates);
-            step.symbol = symbol;
-            step.moveNfaStates = sortedStates(moved);
-            step.closureNfaStates = sortedStates(closure);
-            step.targetId = targetId;
-            step.isNew = isNew;
-            step.isAccepting = isAccepting;
-            steps.push_back(std::move(step));
-
-            transitions[current][symbol] = {targetId};
-
-            if (!processed.count(targetId)) worklist.push_back(targetId);
         }
+
+        Automaton dfa;
+        dfa.stateCount = static_cast<int>(stateSets.size());
+        dfa.startState = startState;
+        dfa.acceptStates = acceptStates;
+        dfa.transitions = transitions;
+
+        SubsetTrace trace;
+        trace.steps = std::move(steps);
+        trace.subsetCount = dfa.stateCount;
+        return TracedSubsetConstruction{std::move(dfa), std::move(trace)};
+    } catch (const BudgetExceeded& error) {
+        throw AutomatonTooComplexError(
+            std::string("Growth Lab subset construction stopped safely: ") + error.message + ".");
     }
-
-    std::unordered_set<int> acceptStates;
-    for (size_t dfaId = 0; dfaId < stateSets.size(); ++dfaId) {
-        for (int nfaState : stateSets[dfaId]) {
-            if (nfa.acceptStates.count(nfaState)) {
-                acceptStates.insert(static_cast<int>(dfaId));
-                break;
-            }
-        }
-    }
-
-    Automaton dfa;
-    dfa.stateCount = static_cast<int>(stateSets.size());
-    dfa.startState = startState;
-    dfa.acceptStates = acceptStates;
-    dfa.transitions = transitions;
-
-    SubsetTrace trace;
-    trace.steps = std::move(steps);
-    trace.subsetCount = dfa.stateCount;
-
-    return TracedSubsetConstruction{std::move(dfa), std::move(trace)};
 }
 
 }  // namespace regexlab

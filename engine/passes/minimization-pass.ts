@@ -33,9 +33,25 @@
  * state, which is true by construction — SubsetConstructionPass's
  * worklist only ever creates states it discovers via a real transition,
  * so there's no unreachable-state pruning step needed here.
+ *
+ * Safety limits: minimize() takes an explicit MinimizationLimits so a
+ * caller can tighten or loosen the defaults (the pipeline uses
+ * DEFAULT_MINIMIZATION_LIMITS). maxDfaStates is a cheap up-front size
+ * guard, checked before any alphabet work. maxWorkUnits backstops the
+ * refinement cost itself — see the comment above its check, below, for
+ * the stateCount^2 * alphabetSize derivation and why it's measured AFTER
+ * alphabet compression.
  */
 
 import type { Automaton } from "../types.js";
+import { AutomatonTooComplexError, MAX_MINIMIZATION_WORK_UNITS } from "../resource-limits.js";
+
+export type MinimizationLimits = { maxDfaStates: number; maxWorkUnits: number };
+
+export const DEFAULT_MINIMIZATION_LIMITS: Readonly<MinimizationLimits> = Object.freeze({
+  maxDfaStates: 20_000,
+  maxWorkUnits: MAX_MINIMIZATION_WORK_UNITS,
+});
 
 function alphabetOf(dfa: Automaton): string[] {
   const symbols = new Set<string>();
@@ -130,54 +146,70 @@ function refine(groups: number[][], dfa: Automaton, alphabet: string[]): { group
 }
 
 /**
- * refine()'s per-state signature loop runs once per fixpoint round (up to
- * stateCount rounds), so its real cost is stateCount^2 * alphabetSize —
- * fine for a handful of symbols, not fine for a `.`-heavy pattern whose
- * alphabet is however many distinct ASCII codes its character classes
- * cover (up to 126). Alphabet compression (above) usually drives that
- * down to ~1 for a single repeated class, but a pattern can still be
- * constructed where every symbol's transition column really is distinct
- * (no two symbols ever collapse) — e.g. a long concatenation of distinct
- * single-character literals, where each literal is "live" at exactly one
- * unique state and so is never redundant with any other. For that
- * adversarial shape, compression buys nothing and the cost is still
- * stateCount^2 * alphabetSize.
- *
- * This threshold is a backstop against that shape, not the primary fix —
- * the primary fix is the compression above. Derivation: the engine's
- * alphabet is ASCII-only (at most 128 symbols, CLAUDE.md §10), so even the
- * fully-adversarial case can't push alphabetSize past 128. Measured on the
- * WASM build pre-compression (Stage 1 of the issue #64 follow-up review):
- * stateCount=501, alphabetSize=126 (a `.` x500 chain) cost ~6793ms, i.e.
- * ~4637 (stateCount^2 * alphabetSize) units per millisecond. Capping
- * worst-case synchronous blocking at ~2s on that same hardware gives
- * 2000ms * 4637 ~= 9.27M; rounded down for margin. Post-compression, the
- * same `.` x500 case now costs 500^2 * 1 = 250,000 — 40x under this
- * threshold — while a 128-symbol, zero-compression, 500-state adversarial
- * case (500^2 * 128 = 32,000,000) is caught well before it would run.
+ * MinimizationPass entry point: DFA in, minimal DFA out (Moore's
+ * algorithm), subject to the explicit limits (defaulting to
+ * DEFAULT_MINIMIZATION_LIMITS).
  */
-const MAX_MINIMIZATION_WORK = 10_000_000;
-
-class MinimizationFailure extends Error {
-  readonly parseError: { type: "AutomatonTooComplex"; position: number; expected: string; found: string };
-  constructor(stateCount: number, alphabetSize: number) {
-    super("AutomatonTooComplex");
-    this.parseError = {
-      type: "AutomatonTooComplex",
-      position: 0,
-      expected: `stateCount^2 * alphabetSize <= ${MAX_MINIMIZATION_WORK}`,
-      found: `stateCount=${stateCount}, alphabetSize=${alphabetSize} (stateCount^2 * alphabetSize = ${stateCount * stateCount * alphabetSize})`,
-    };
+export function minimize(dfa: Automaton, limits: MinimizationLimits = DEFAULT_MINIMIZATION_LIMITS): Automaton {
+  if (
+    !Number.isSafeInteger(limits.maxDfaStates) ||
+    limits.maxDfaStates < 0 ||
+    !Number.isSafeInteger(limits.maxWorkUnits) ||
+    limits.maxWorkUnits < 0
+  ) {
+    throw new RangeError("Minimization limits must be non-negative safe integers.");
   }
-}
+  if (dfa.stateCount > limits.maxDfaStates) {
+    throw new AutomatonTooComplexError(
+      `DFA minimization received ${dfa.stateCount} states, above its safety limit of ${limits.maxDfaStates.toLocaleString()}.`,
+    );
+  }
 
-/** MinimizationPass entry point: DFA in, minimal DFA out (Moore's algorithm). */
-export function minimize(dfa: Automaton): Automaton {
   const alphabet = alphabetOf(dfa);
   const representatives = representativeAlphabetOf(dfa, alphabet, dfa.stateCount);
 
+  /**
+   * refine()'s per-state signature loop runs once per fixpoint round (up to
+   * stateCount rounds), so its real cost is stateCount^2 * alphabetSize —
+   * fine for a handful of symbols, not fine for a `.`-heavy pattern whose
+   * alphabet is however many distinct ASCII codes its character classes
+   * cover (up to 126). Alphabet compression (above) usually drives that
+   * down to ~1 for a single repeated class, but a pattern can still be
+   * constructed where every symbol's transition column really is distinct
+   * (no two symbols ever collapse) — e.g. a long concatenation of distinct
+   * single-character literals, where each literal is "live" at exactly one
+   * unique state and so is never redundant with any other. For that
+   * adversarial shape, compression buys nothing and the cost is still
+   * stateCount^2 * alphabetSize.
+   *
+   * This check is a backstop against that shape, not the primary fix — the
+   * primary fix is the compression above, which is why the estimate below
+   * uses representatives.length (the alphabet size AFTER compression), not
+   * alphabet.length. Derivation of the default budget
+   * (MAX_MINIMIZATION_WORK_UNITS, resource-limits.ts): the engine's alphabet
+   * is ASCII-only (at most 128 symbols, CLAUDE.md §10), so even the
+   * fully-adversarial case can't push alphabetSize past 128. Measured on the
+   * WASM build pre-compression (Stage 1 of the issue #64 follow-up review):
+   * stateCount=501, alphabetSize=126 (a `.` x500 chain) cost ~6793ms, i.e.
+   * ~4637 (stateCount^2 * alphabetSize) units per millisecond. Capping
+   * worst-case synchronous blocking at ~2s on that same hardware gives
+   * 2000ms * 4637 ~= 9.27M; rounded down to 10,000,000 for margin. This is
+   * restored from main's own measured value — a prior revision of this pass
+   * silently halved it to 5,000,000 with no re-derivation, which would
+   * reject a legitimate, moderately-complex pattern well within the
+   * fully-adversarial case this budget is sized for (e.g. stateCount~300,
+   * alphabetSize~60 costs 5.4M, comfortably under 10M but over 5M).
+   * Post-compression, the `.` x500 case now costs 500^2 * 1 = 250,000 work
+   * units — far under the budget — while a 128-symbol, zero-compression,
+   * 500-state adversarial case (500^2 * 128 = 32,000,000) is still caught
+   * well before it would run.
+   */
   const work = dfa.stateCount * dfa.stateCount * representatives.length;
-  if (work > MAX_MINIMIZATION_WORK) throw new MinimizationFailure(dfa.stateCount, representatives.length);
+  if (work > limits.maxWorkUnits) {
+    throw new AutomatonTooComplexError(
+      `DFA minimization exceeded its safety limit of ${limits.maxWorkUnits.toLocaleString()} work units.`,
+    );
+  }
 
   const allStates = Array.from({ length: dfa.stateCount }, (_, i) => i);
   const accepting = allStates.filter((s) => dfa.acceptStates.has(s));
@@ -229,6 +261,10 @@ export function minimize(dfa: Automaton): Automaton {
     const representative = groups[groupIndex][0]; // any member; refinement guarantees they all agree
     const currentId = idFor(groupIndex);
 
+    // Uses the FULL alphabet, not the compressed representatives — the
+    // minimized DFA's own transition table still needs an entry for every
+    // symbol that had one; representatives are only ever a shortcut for
+    // computing the partition, not part of the output.
     for (const symbol of alphabet) {
       const dest = dfa.transitions.get(representative)?.get(symbol)?.[0];
       if (dest === undefined) continue;

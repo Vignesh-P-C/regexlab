@@ -70,13 +70,63 @@
  *   - `optional` is "zero or one": a skip edge straight to the new accept
  *     state, exactly like star's skip edge, but with NO loop-back edge
  *     (so at most one repetition is ever possible).
+ *
+ * NFA-state guard: a `plus` fragment allocates TWO full copies of its
+ * child fragment (mandatory + repeating), so nesting plus inside plus
+ * doubles the state count at every level — state count can grow
+ * exponentially in nesting depth even though the 500-char pattern-length
+ * cap (parser-pass) bounds the AST's SIZE, not its shape. estimateStateCount
+ * walks the AST and computes the exact number of states buildFragment would
+ * allocate, mirroring buildFragment's own per-node-kind arithmetic, but
+ * saturates the running total at MAX_NFA_STATES + 1 (via addCapped /
+ * doubleCapped) the moment it would exceed the cap — so the estimate itself
+ * stays cheap, no exponential blowup ever actually happens while computing
+ * it. thompsonConstruction checks this estimate before calling
+ * buildFragment, so an oversized pattern fails fast with a clear error
+ * instead of exhausting memory partway through construction.
  */
 
 import type { ASTNode, Automaton } from "../types.js";
 import { encodeCharacterSet } from "../character-set.js";
+import { AutomatonTooComplexError, MAX_NFA_STATES } from "../resource-limits.js";
 
 /** A fragment under construction: exactly one start state, one accept state. */
 type Fragment = { start: number; accept: number; inlineExits?: number[] };
+
+/** left + right, saturating at MAX_NFA_STATES + 1 instead of overflowing. */
+function addCapped(left: number, right: number): number {
+  return left > MAX_NFA_STATES || right > MAX_NFA_STATES - left ? MAX_NFA_STATES + 1 : left + right;
+}
+
+/** value * 2, saturating at MAX_NFA_STATES + 1 instead of overflowing. */
+function doubleCapped(value: number): number {
+  return value > Math.floor(MAX_NFA_STATES / 2) ? MAX_NFA_STATES + 1 : value * 2;
+}
+
+/**
+ * Counts the exact number of states buildFragment will allocate for this
+ * AST, without building it: two states per leaf (char/charset), the
+ * child's count plus two wrapper states for star/optional/alt, and double
+ * the child's count for plus (one mandatory copy, one repeating copy).
+ * Saturating arithmetic (addCapped/doubleCapped) keeps this walk itself
+ * cheap even for the pathological nesting shapes it exists to catch.
+ */
+function estimateStateCount(node: ASTNode, inlineTerminalPlus = false): number {
+  switch (node.kind) {
+    case "char":
+    case "charset":
+      return 2;
+    case "concat":
+      return addCapped(estimateStateCount(node.left, true), estimateStateCount(node.right, inlineTerminalPlus));
+    case "alt":
+      return addCapped(addCapped(estimateStateCount(node.left), estimateStateCount(node.right)), 2);
+    case "star":
+    case "optional":
+      return addCapped(estimateStateCount(node.child), 2);
+    case "plus":
+      return addCapped(doubleCapped(estimateStateCount(node.child)), inlineTerminalPlus ? 0 : 1);
+  }
+}
 
 class NFABuilder {
   private stateCount = 0;
@@ -201,8 +251,20 @@ function buildFragment(node: ASTNode, builder: NFABuilder, inlineTerminalPlus = 
   }
 }
 
-/** ThompsonPass entry point: AST in, NFA (as an Automaton) out. Pure, no side effects. */
+/**
+ * ThompsonPass entry point: AST in, NFA (as an Automaton) out. Pure, no
+ * side effects. Throws AutomatonTooComplexError before building anything
+ * if estimateStateCount predicts the result would exceed MAX_NFA_STATES —
+ * see this file's header comment for why that estimate is itself cheap
+ * even for the nesting shapes it exists to catch.
+ */
 export function thompsonConstruction(ast: ASTNode): Automaton {
+  const estimatedStates = estimateStateCount(ast);
+  if (estimatedStates > MAX_NFA_STATES) {
+    throw new AutomatonTooComplexError(
+      `Thompson construction would exceed the safe limit of ${MAX_NFA_STATES.toLocaleString()} NFA states.`,
+    );
+  }
   const builder = new NFABuilder();
   const fragment = buildFragment(ast, builder);
   return builder.build(fragment.start, fragment.accept);

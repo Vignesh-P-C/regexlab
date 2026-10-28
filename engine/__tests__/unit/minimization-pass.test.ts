@@ -84,3 +84,10 @@ describe("MinimizationPass — accepting and non-accepting states never merge", 
     }
   });
 });
+describe("MinimizationPass safety limits", () => {
+  it("stops when the refinement work budget is exhausted", () => {
+    const { dfa } = minDfaFor("(a|b)*ab");
+    expect(() => minimize(dfa, { maxDfaStates: 100, maxWorkUnits: 0 }))
+      .toThrow(/minimization exceeded its safety limit/i);
+  });
+});

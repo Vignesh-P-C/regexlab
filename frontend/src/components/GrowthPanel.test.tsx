@@ -3,7 +3,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import type { Automaton, CandidateResponse, GrowthAnalysisResult } from "../types/engine";
+import type {
+  Automaton,
+  BoundedOptimizationResponse,
+  CandidateResponse,
+  GrowthAnalysisResult,
+} from "../types/engine";
 import { GrowthPanel } from "./GrowthPanel";
 
 afterEach(cleanup);
@@ -71,8 +76,9 @@ function renderPanel(
   nfa: Automaton = oneEdgeNfa,
   runGrowthAnalysis = vi.fn(() => analysis),
   verifyCandidate = vi.fn(() => differentCandidate),
+  runBoundedOptimization = vi.fn((): BoundedOptimizationResponse | null => null),
 ) {
-  const props = { pattern, nfa, runGrowthAnalysis, verifyCandidate };
+  const props = { pattern, nfa, runGrowthAnalysis, verifyCandidate, runBoundedOptimization };
   const view = render(createElement(GrowthPanel, props));
   return { ...view, runGrowthAnalysis, verifyCandidate };
 }
@@ -94,6 +100,7 @@ describe("GrowthPanel source-pattern tracking (#68)", () => {
         nfa: oneEdgeNfa,
         runGrowthAnalysis,
         verifyCandidate: vi.fn(() => differentCandidate),
+        runBoundedOptimization: vi.fn((): BoundedOptimizationResponse | null => null),
       }),
     );
 
@@ -107,14 +114,6 @@ describe("GrowthPanel source-pattern tracking (#68)", () => {
     expect(screen.queryByText(/pattern changed/i)).toBeNull();
     expect(screen.getByText("Reachable subset-DFA states")).toBeTruthy();
     expect(screen.getByRole("checkbox")).toBeTruthy();
-  });
-
-  it("hides the unsupported structural upper-bound placeholder", () => {
-    renderPanel("a");
-    fireEvent.click(screen.getByRole("button", { name: /explore subset growth/i }));
-
-    expect(screen.queryByText("Research-based structural upper bound")).toBeNull();
-    expect(screen.queryByText("Not computed")).toBeNull();
   });
 
   it("verifies multiple selected epsilon deletions together and displays the witness", () => {

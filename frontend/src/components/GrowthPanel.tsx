@@ -1,12 +1,14 @@
 import { useState } from "react";
-import type { Automaton, CandidateEdgeId, CandidateResponse, GrowthAnalysisResult } from "../types/engine";
+import type { Automaton, BoundedOptimizationResponse, CandidateEdgeId, CandidateResponse, GrowthAnalysisResult } from "../types/engine";
 import { listEligibleEpsilonEdges } from "../lib/growth";
+import { BoundedOptimizationExplorer } from "./BoundedOptimizationExplorer";
 
 type Props = {
   pattern: string;
   nfa: Automaton;
   runGrowthAnalysis: (pattern: string) => GrowthAnalysisResult | null;
   verifyCandidate: (pattern: string, edges: CandidateEdgeId[]) => CandidateResponse | null;
+  runBoundedOptimization?: (pattern: string, maxEditDepth: number, maxCandidates: number) => BoundedOptimizationResponse | null;
 };
 
 function edgeKey(edge: CandidateEdgeId): string {
@@ -20,18 +22,18 @@ function powersetLabel(exactDecimal: string): string {
   return "exact value has " + exactDecimal.length + " digits";
 }
 
-export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }: Props) {
+export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate, runBoundedOptimization }: Props) {
   const [open, setOpen] = useState(false);
   const [analysis, setAnalysis] = useState<GrowthAnalysisResult | null>(null);
   const [analysisPattern, setAnalysisPattern] = useState<string | null>(null);
-  const [selectedEdgeKeys, setSelectedEdgeKeys] = useState<Set<string>>(() => new Set<string>());
+  const [selectedEdgeKeys, setSelectedEdgeKeys] = useState<Set<string>>(() => new Set());
   const [verifiedEdges, setVerifiedEdges] = useState<CandidateEdgeId[]>([]);
   const [verification, setVerification] = useState<CandidateResponse | null>(null);
 
   function refreshAnalysis() {
     setAnalysis(runGrowthAnalysis(pattern));
     setAnalysisPattern(pattern);
-    setSelectedEdgeKeys(new Set<string>());
+    setSelectedEdgeKeys(new Set());
     setVerifiedEdges([]);
     setVerification(null);
   }
@@ -102,7 +104,7 @@ export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }
       {!analysisIsStale && !analysis && <p className="growth-loading">Computing analysis…</p>}
       {!analysisIsStale && analysis && !analysis.ok && (
         <div className="growth-alert growth-alert--error" role="alert">
-          Pattern error: {analysis.error.type}
+          {analysis.error.message ?? `Pattern error: ${analysis.error.type}`}
         </div>
       )}
 
@@ -146,6 +148,7 @@ export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }
               <strong>{analysis.analysis.reachableSubsetStateCount}</strong> subsets.
             </p>
           </section>
+
 
           <details className="growth-trace growth-section">
             <summary>
@@ -213,7 +216,7 @@ export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }
                     </button>
                     <button
                       className="growth-button growth-button--quiet"
-                      onClick={() => updateSelection(new Set<string>())}
+                      onClick={() => updateSelection(new Set())}
                       disabled={selectedEdges.length === 0}
                     >
                       Clear
@@ -294,6 +297,10 @@ export function GrowthPanel({ pattern, nfa, runGrowthAnalysis, verifyCandidate }
               </>
             )}
           </section>
+
+          {runBoundedOptimization && (
+            <BoundedOptimizationExplorer pattern={pattern} baselineNfa={nfa} runBoundedOptimization={runBoundedOptimization} />
+          )}
         </>
       )}
     </section>

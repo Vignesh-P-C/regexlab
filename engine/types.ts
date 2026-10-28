@@ -9,7 +9,7 @@ export type ASTNode =
   | { kind: "optional"; child: ASTNode };
 export type ParseError = {
   type: "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator" | "PatternTooComplex" | "InvalidCharacterClass" | "AutomatonTooComplex";
-  position: number; expected?: string; found?: string;
+  position: number; expected?: string; found?: string; message?: string;
 };
 export type ParseResult = { ok: true; ast: ASTNode } | { ok: false; error: ParseError };
 export type Automaton = { stateCount: number; startState: number; acceptStates: Set<number>; transitions: Map<number, Map<string, number[]>> };

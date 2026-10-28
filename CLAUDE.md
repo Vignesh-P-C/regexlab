@@ -12,7 +12,7 @@
 
 ### 0.1 Operating instructions for this Claude session
 
-1. **Don't build ahead of the current phase.** Check the Progress Tracker (§15) before writing any code. If Core isn't fully complete and both students can explain it, do not implement anything under Stretch A/B/Hard Stretch — even if asked directly. Flag it and confirm they're sure, since skipping ahead is the single biggest named risk in this plan (§16). The only open optional add-on issue is #45 (AST simplifier), and it remains undecided; don't start it until that decision is recorded in §15. The direct-method issues (#43/#44) and bytecode issues (#46/#47) were closed as out of scope.
+1. **Respect the phase gate, and record explicit scope decisions.** Issue #60 is the user-approved first grammar extension: grammar v1 adds plus/optional, dot, ASCII character classes/ranges/negation, and documented escapes. This approval does not authorize unrelated stretch work. For later stretch items, check the Progress Tracker (§15), verify that the core is ready, and record the decision before implementation.
 2. **Prefer clear, well-commented, "textbook" code over clever or terse code.** This will be explained in a viva by two undergraduates, not maintained by a team. An implementation that visibly maps to the algorithm's textbook description beats a compact one every time.
 3. **Always name the algorithm you're implementing or explaining** — Thompson's construction, subset construction (Rabin–Scott), Moore's minimization, etc. — and note that these are the constructions covered in Aho/Lam/Sethi/Ullman's *Compilers: Principles, Techniques, and Tools*, the prescribed textbook for BCSE307L.
 4. **Run an "explain it back" checkpoint after every pass, before moving to the next one.** Ask the student(s) to explain what the pass does and why, in their own words, with no notes and no scrolling back up. If they can't do it cleanly, stay on this pass rather than proceeding.
@@ -28,13 +28,14 @@
 
 - Paste this file, plus the current Progress Tracker (§15), at the start of every new chat.
 - Do the explain-it-back checkpoint with *each other*, not with Claude — Claude can prompt for it, but the test is whether you two can do it unassisted.
-- Don't chase a stretch goal because it sounds impressive mid-project. Core, fully working and understood, beats a longer feature list that neither of you can defend.
+- Don't infer approval for future stretch work from issue #60. Grammar v1 is the specifically approved extension; other stretch goals remain gated until the Progress Tracker records a decision.
 - Check your course/university's policy on AI-assisted coursework — see §17.
 - Keep a shared notes doc logging what each of you personally built and understand, in case you're questioned separately in viva.
 
 ### 0.3 Repo and workflow conventions
 
 - **Repo:** `github.com/Vignesh-P-C/regexlab` (public). Collaborators: Vignesh (`Vignesh-P-C`, owner) and Ujwal (`ujwal2311`, Write access).
+- **Branch and commit identity:** Prefix task branches with `Vignesh-P-C/`; never use `codex/`. Use the Git author name `Vignesh-P-C` and retain the account’s configured email.
 - **Branch protection on `main`:** changes land only through a pull request that needs an approval; "do not allow bypassing" is on, which applies to the owner too. So every change needs the other teammate's real review.
 - **Branch per issue**, cut from an up-to-date `main`. Commit messages use conventional commits (`feat(frontend): …`, `fix(engine): …`, `docs: …`, `test(engine): …`). Put `Closes #N` in the PR body when a PR finishes an issue.
 - **Before every push or PR:** `git fetch origin`, then check `git log --oneline HEAD..origin/main` is empty (otherwise `git rebase origin/main` and `git push --force-with-lease`), `git diff origin/main...HEAD --name-only` lists only intended files, and `git diff origin/main...HEAD -- .gitignore` is empty unless the change is deliberate.
@@ -130,20 +131,22 @@ If asked "why more TOC than compiler concepts": Module 1 itself frames lexical a
 
 ## 6. Formal Grammar
 
-Write this into the parser file as a comment block — a parser without a written grammar is a parser you can't prove is complete.
+**Implemented grammar v1:** the formal grammar and complete semantics live in docs/regex-grammar-v1.md.
 
-```
-regex      ::= term ('|' term)*
-term       ::= factor+
-factor     ::= atom quantifier?
-quantifier ::= '*' | '+' | '?'
-atom       ::= CHAR
-             | '(' regex ')'
-             | '[' charclass ']'
-charclass  ::= CHAR ('-' CHAR)? (CHAR ('-' CHAR)?)*
-```
+~~~ebnf
+regex       ::= term ("|" term)*
+term        ::= factor+
+factor      ::= atom quantifier?
+quantifier  ::= "*" | "+" | "?"
+atom        ::= ASCII_CHAR | "." | characterClass | "(" regex ")"
+characterClass ::= "[" "^"? classItem+ "]"
+~~~
 
-**Implemented today (Core):** `CHAR` (a backslash escapes a metacharacter), concatenation, `|`, `*`, `( )`. `+`, `?`, and `[a-z]` character classes are stretch goals (§11). Because `a**` is not in this grammar, `*` after a quantified atom is a syntax error (`DanglingOperator`).
+Precedence from low to high is alternation, concatenation, then postfix quantifiers. Alternation and concatenation are left-associative. The character universe is ASCII 0x00–0x7F; dot excludes CR and LF. The shorthand sets, escaping, literal-plus migration, full-string semantics, and unsupported syntax are all recorded in the grammar reference.
+
+Current AST kinds are char, charset, concat, alt, star, plus, and optional. Character classes are retained as one symbolic AST node and one compact NFA edge; subset construction expands that edge into concrete ASCII symbols for the DFA.
+
+Backreferences, lookaround, bounded repetition, empty groups, and empty alternatives are outside the current grammar. Outside classes, caret and dollar are literals; they are not zero-width anchors because matching is already full-string.
 
 ---
 
@@ -155,15 +158,18 @@ The contract that matters is the **JSON wire format** between the C++/WASM engin
 // Wire format (what runPipeline(pattern, input) returns, as a JSON string)
 type ASTNode =
   | { kind: "char"; value: string }
+  | { kind: "charset"; characters: number[]; label: string }
   | { kind: "concat"; left: ASTNode; right: ASTNode }
   | { kind: "alt"; left: ASTNode; right: ASTNode }
-  | { kind: "star"; child: ASTNode };
+  | { kind: "star"; child: ASTNode }
+  | { kind: "plus"; child: ASTNode }
+  | { kind: "optional"; child: ASTNode };
 
 type Automaton = {
   stateCount: number;
   startState: number;
   acceptStates: number[];
-  transitions: Record<string, Record<string, number[]>>; // stateId (string key) -> symbol|"eps" -> [targets]
+  transitions: Record<string, Record<string, number[]>>; // ASCII symbol, "eps", or "cs:" plus 32 hex digits
 };
 
 type MatchStep = { ch: string; activeStates: number[] };
@@ -176,7 +182,7 @@ type MatchTrace = {
 
 type ParseErrorType =
   | "UnmatchedParen" | "UnexpectedToken" | "EmptyGroup" | "DanglingOperator"
-  | "PatternTooComplex"; // pattern length > 500 or nesting depth > 1000
+  | "PatternTooComplex" | "InvalidCharacterClass";
 
 type ParseError = { type: ParseErrorType; position: number; expected: string | null; found: string | null };
 
@@ -248,12 +254,12 @@ The length cap exists because the nesting guard counts only `(`: a long chain of
 
 | Phase | Scope | Status |
 |---|---|---|
-| **Core (must-ship)** | `char`, concat, `\|`, `*`, `()`, pass pipeline (TS + C++), golden tests, pipeline-equivalence test, differential tests (both languages), WASM binding, visualizer, Moore's minimization, AI suggestion layer with hard gate | 🔄 Engine, pipeline, differential testing, WASM and visualizer done. Contract freeze, AI layer, CI/deployment and report remain |
+| **Core (must-ship)** | Grammar v1 (ASCII literals/sets, concat, alternation, star/plus/optional, dot, groups), pass pipeline (TS + C++), golden tests, pipeline-equivalence, differential tests, WASM and visualizer | 🔄 Issue #60 adds the grammar extension; contract freeze, AI layer, CI/deployment and report remain |
 | **Remaining optional syllabus item** | #45 AST simplifier (Module 5); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned | 🤔 #45 remains open and undecided; record a team decision in §15 before starting it. If taken forward and its simplified-AST output adds JSON fields, settle that before contract freeze (#16). Direct-method #43/#44 and bytecode #46/#47 were closed as out of scope |
-| **Stretch A** | `+`, `?` quantifiers | Cheap once `*` works |
-| **Stretch B** | `[a-z]` character classes | If time remains after Core is demo-ready |
+| **Stretch A** | Plus and optional quantifiers | ✅ Included in grammar v1 by issue #60 |
+| **Stretch B** | ASCII character classes, ranges, negation, dot and shorthands | ✅ Included in grammar v1 by issue #60 |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | Only if Core is finished *and* both can explain differential testing and Moore's minimization without notes — the two places where AI-assisted speed and genuine understanding are most likely to diverge |
-| **Explicitly out of scope** | Backreferences, lookahead/lookbehind | These break the regular-language guarantee — a theory-grounded scope decision, not an oversight |
+| **Explicitly out of scope for grammar v1** | Backreferences, lookaround, bounded repetition, and zero-width anchors | Deliberately excluded from the current automata grammar; see docs/regex-grammar-v1.md |
 
 ---
 

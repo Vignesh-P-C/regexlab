@@ -28,6 +28,7 @@ import {
   computeInputPlaybackSteps,
   computeAstSteps,
   postOrderAstNodes,
+  withPlaybackDeadState,
   PLAYBACK_MAX_CHARS,
   type Step,
 } from "./steps";
@@ -114,7 +115,116 @@ describe("computeNfaSteps / computeDfaSteps -- direct cases (#52)", () => {
     expect(nfaSteps[1].verdict).toBe("stuck");
     expect(dfaSteps[1].verdict).toBe("stuck");
     expect(dfaSteps[1].caption).toContain("stuck on 'b'");
+    expect(dfaSteps[1].activeStates).toEqual([dfa.stateCount]);
+    expect(dfaSteps[1].traversedEdges).toEqual([
+      { from: dfa.startState, to: dfa.stateCount, label: "b" },
+    ]);
+    const viewDfa = withPlaybackDeadState(dfa, dfaSteps[1]);
+    expect(viewDfa.stateCount).toBe(dfa.stateCount + 1);
+    expect(viewDfa.acceptStates).toEqual(dfa.acceptStates);
+    expect(viewDfa.acceptStates).not.toContain(dfa.stateCount);
+    expect(viewDfa.transitions[String(dfa.startState)]?.b).toEqual([dfa.stateCount]);
+    expect(viewDfa.transitions[String(dfa.stateCount)]?.["Σ"]).toEqual([dfa.stateCount]);
+    expect(dfa.transitions[String(dfa.startState)]?.b).toBeUndefined(); // display overlay did not mutate the engine DFA
   });
+
+  it("'(a|b+)*' accepts every a/b string, while an unexpected c enters a rejecting sink", () => {
+    const { dfa, minDfa } = buildAll("(a|b+)*");
+    for (const automaton of [dfa, minDfa]) {
+      // This pattern is equivalent to (a|b)*, so every real reachable state accepts.
+      expect(automaton.acceptStates).toHaveLength(automaton.stateCount);
+      const steps = computeDfaSteps(automaton, "aac");
+      const failed = steps[steps.length - 1];
+      expect(failed.verdict).toBe("stuck");
+      expect(failed.char).toBe("c");
+      expect(failed.activeStates).toEqual([automaton.stateCount]);
+      const display = withPlaybackDeadState(automaton, failed);
+      const dead = automaton.stateCount;
+      expect(display.acceptStates).toEqual(automaton.acceptStates);
+      expect(display.acceptStates).not.toContain(dead);
+      expect(display.transitions[String(failed.traversedEdges[0].from)]?.c).toEqual([dead]);
+      expect(display.transitions[String(dead)]?.["Σ"]).toEqual([dead]);
+      expect(automaton.stateCount).toBe(dead); // source automaton remains unchanged
+    }
+  });
+
+  it("missing DFA transitions enter a non-accepting sink across varied patterns and failure positions", () => {
+    const cases = [
+      { pattern: "a", input: "b" },
+      { pattern: "ab", input: "abx" },
+      { pattern: "[a-c]+", input: "abz" },
+      { pattern: "(a|b+)*", input: "aac" },
+    ];
+
+    for (const { pattern, input } of cases) {
+      const { dfa, minDfa, engineMinDfa } = buildAll(pattern);
+      for (const automaton of [dfa, minDfa]) {
+        const steps = computeDfaSteps(automaton, input);
+        const failed = steps[steps.length - 1];
+        expect(failed.verdict, pattern + " / " + input).toBe("stuck");
+        expect(failed.char).toBe(input[match(engineMinDfa, input).failurePosition!]);
+        expect(failed.activeStates).toEqual([automaton.stateCount]);
+
+        const display = withPlaybackDeadState(automaton, failed);
+        const dead = automaton.stateCount;
+        expect(display.stateCount).toBe(dead + 1);
+        expect(display.acceptStates).not.toContain(dead);
+        expect(display.transitions[String(failed.traversedEdges[0].from)]?.[failed.char!]).toEqual([dead]);
+        expect(display.transitions[String(dead)]?.["Σ"]).toEqual([dead]);
+      }
+    }
+  });
+
+  it("bounded exhaustive playback agrees with both engine DFAs and sinks only on missing transitions", () => {
+    const patterns = ["a", "ab", "a*", "(a|b+)*", "(a|b+)b*a?b", "[a-c]+"];
+    const alphabet = ["a", "b", "c", "x"];
+    const inputs = [""];
+    let frontier = [""];
+    for (let length = 1; length <= 5; length++) {
+      frontier = frontier.flatMap((prefix) => alphabet.map((char) => prefix + char));
+      inputs.push(...frontier);
+    }
+
+    for (const pattern of patterns) {
+      const { dfa, minDfa, engineDfa, engineMinDfa } = buildAll(pattern);
+      for (const [automaton, engineAutomaton] of [
+        [dfa, engineDfa],
+        [minDfa, engineMinDfa],
+      ] as const) {
+        for (const input of inputs) {
+          const steps = computeDfaSteps(automaton, input);
+          const finalStep = steps[steps.length - 1];
+          const engineResult = match(engineAutomaton, input);
+          const expected = engineResult.failurePosition === undefined
+            ? engineResult.result
+            : "stuck";
+          expect(finalStep.verdict, pattern + " / " + JSON.stringify(input)).toBe(expected);
+
+          if (expected === "stuck") {
+            const dead = automaton.stateCount;
+            expect(finalStep.activeStates).toEqual([dead]);
+            const display = withPlaybackDeadState(automaton, finalStep);
+            expect(display.acceptStates).not.toContain(dead);
+            expect(display.transitions[String(finalStep.traversedEdges[0].from)]?.[finalStep.char!]).toEqual([dead]);
+            expect(display.transitions[String(dead)]?.["Σ"]).toEqual([dead]);
+          } else {
+            expect(withPlaybackDeadState(automaton, finalStep)).toBe(automaton);
+          }
+        }
+      }
+    }
+  });
+
+  it("a fully consumed non-accepting DFA state is not mislabeled as a dead-state transition", () => {
+    const { dfa } = buildAll("ab");
+    const steps = computeDfaSteps(dfa, "a");
+    const final = steps[steps.length - 1];
+
+    expect(final.verdict).toBe("no-match");
+    expect(final.activeStates).not.toContain(dfa.stateCount);
+    expect(withPlaybackDeadState(dfa, final)).toBe(dfa);
+  });
+
 
   it("'(a*)*': nested star of an already-nullable subexpression still closes correctly", () => {
     const { nfa, dfa, minDfa } = buildAll("(a*)*");

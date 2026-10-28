@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { thompsonConstruction } from "../../passes/thompson-pass.js";
+import { AutomatonTooComplexError } from "../../resource-limits.js";
 import { parse } from "../../passes/parser-pass.js";
 import type { Automaton } from "../../types.js";
 
@@ -77,8 +78,8 @@ describe("ThompsonPass — Kleene star", () => {
   });
 });
 
-describe("ThompsonPass — plus", () => {
-  it("'a+' is a mandatory copy followed by a repeatable copy", () => {
+describe("ThompsonPass - plus", () => {
+  it("'a+' is one mandatory a followed by a repeatable a", () => {
     const nfa = nfaFor("a+");
     expect(nfa.stateCount).toBe(5);
     expect(nfa.startState).toBe(0);
@@ -120,5 +121,26 @@ describe("ThompsonPass — composition", () => {
     expect(nfa.acceptStates).toEqual(new Set([7]));
     // star's start epsilon-branches to the alt's start (4) and to star's own accept (7)
     expect(flat(nfa)[6]).toEqual({ eps: [4, 7] });
+  });
+});
+
+describe("ThompsonPass resource guard", () => {
+  it("rejects nested plus expansion before allocating the exponential NFA", () => {
+    let pattern = "a+";
+    for (let depth = 0; depth < 12; depth++) pattern = `(${pattern})+`;
+    const parsed = parse(pattern);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(() => thompsonConstruction(parsed.ast)).toThrow(AutomatonTooComplexError);
+    }
+  });
+});
+
+describe("ThompsonPass compatibility near the ordinary pattern limit", () => {
+  it("still builds a maximum-length alternation without crossing the NFA cap", () => {
+    const pattern = Array.from({ length: 250 }, () => "a").join("|");
+    const parsed = parse(pattern);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(thompsonConstruction(parsed.ast).stateCount).toBe(998);
   });
 });

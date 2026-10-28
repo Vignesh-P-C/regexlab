@@ -86,3 +86,12 @@ TEST_CASE("SubsetConstructionPass — determinism sanity check", "[subset]") {
         }
     }
 }
+
+TEST_CASE("SubsetConstructionPass ordinary entry point enforces the supplied work cap", "[subset][limits]") {
+    const ParseResult parsed = parse("a|b");
+    REQUIRE(parsed.ok);
+    const Automaton nfa = thompsonConstruction(parsed.ast);
+    REQUIRE_THROWS_AS(
+        subsetConstruction(nfa, SubsetConstructionLimits{100, 0}),
+        AutomatonTooComplexError);
+}

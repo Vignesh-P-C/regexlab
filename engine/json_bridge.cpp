@@ -1,9 +1,11 @@
 // JSON serialization at the JS/WASM boundary.
 #include "regexlab/json_bridge.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <variant>
 #include <set>
 #include "regexlab/candidate.hpp"
+#include "regexlab/bounded-optimization.hpp"
 #include "regexlab/pipeline.hpp"
 #include "regexlab/growth-analysis.hpp"
 #include "regexlab/passes/parser-pass.hpp"
@@ -14,8 +16,17 @@ using json = nlohmann::json;
 json toJson(const ParseError& e) {
     static const char* names[] = {"UnmatchedParen","UnexpectedToken","EmptyGroup","DanglingOperator","PatternTooComplex","InvalidCharacterClass","AutomatonTooComplex"};
     static_assert(sizeof(names)/sizeof(names[0]) == static_cast<size_t>(ParseErrorType::AutomatonTooComplex)+1, "error names must match ParseErrorType");
-    return json{{"type",names[static_cast<int>(e.type)]},{"position",e.position},
+    json result{{"type",names[static_cast<int>(e.type)]},{"position",e.position},
         {"expected",e.expected ? json(*e.expected) : json(nullptr)},{"found",e.found ? json(*e.found) : json(nullptr)}};
+    if (e.message) result["message"] = *e.message;
+    return result;
+}
+json complexityError(const AutomatonTooComplexError& error) {
+    return toJson(ParseError{ParseErrorType::AutomatonTooComplex, 0, std::nullopt,
+                             std::nullopt, std::string(error.what())});
+}
+std::string complexityFailure(const AutomatonTooComplexError& error) {
+    return json{{"ok", false}, {"error", complexityError(error)}}.dump();
 }
 json toJson(const ASTNodePtr& node) {
     return std::visit([&](auto&& n)->json {
@@ -85,6 +96,41 @@ json toJson(const EquivalenceResult& e) {
 json toJson(const CandidateResult& c) {
     return json{{"nfa",toJson(c.nfa)},{"metrics",toJson(c.metrics)},{"equivalence",toJson(c.equivalence)}};
 }
+json toJson(const CandidateEdgeId& e) {
+    return json{{"source",e.source},{"symbol",e.symbol},{"target",e.target}};
+}
+json toJson(const BoundedSearchLimits& l) {
+    return json{{"maxEligibleEdges",l.maxEligibleEdges},{"maxEditDepth",l.maxEditDepth},
+        {"maxCandidates",l.maxCandidates},{"maxDfaStates",l.maxDfaStates},
+        {"maxWorkUnitsPerCheck",l.maxWorkUnitsPerCheck},{"maxProductStatePairs",l.maxProductStatePairs}};
+}
+json toJson(const BoundedAutomatonMetrics& m) {
+    return json{{"nfa",toJson(m.nfa)},
+        {"reachableSubsetStateCount",m.reachableSubsetStateCount ? json(*m.reachableSubsetStateCount) : json(nullptr)},
+        {"minimizedStateCount",m.minimizedStateCount ? json(*m.minimizedStateCount) : json(nullptr)},
+        {"subsetAnalysisReason",m.subsetAnalysisReason.empty() ? json(nullptr) : json(m.subsetAnalysisReason)},
+        {"minimizationReason",m.minimizationReason.empty() ? json(nullptr) : json(m.minimizationReason)}};
+}
+json toJson(const BoundedOptimizationCandidate& c) {
+    json edits = json::array();
+    for (const auto& edge : c.edits) edits.push_back(toJson(edge));
+    return json{{"id",c.id},{"edits",edits},{"nfa",toJson(c.nfa)},
+        {"metrics",toJson(c.metrics)},{"equivalence",toJson(c.equivalence)},
+        {"minimizedStateCountMatchesBaseline",c.minimizedStateCountMatchesBaseline
+            ? json(*c.minimizedStateCountMatchesBaseline) : json(nullptr)}};
+}
+json toJson(const BoundedOptimizationResult& r) {
+    json candidates = json::array();
+    for (const auto& candidate : r.candidates) candidates.push_back(toJson(candidate));
+    return json{{"limits",toJson(r.limits)},
+        {"totalEligibleEdgeCount",r.totalEligibleEdgeCount},{"consideredEdgeCount",r.consideredEdgeCount},
+        {"searchSpaceCandidateCount",r.searchSpaceCandidateCount},{"generatedCandidateCount",r.generatedCandidateCount},
+        {"evaluatedCandidateCount",r.evaluatedCandidateCount},{"equivalentCandidateCount",r.equivalentCandidateCount},
+        {"differentCandidateCount",r.differentCandidateCount},{"inconclusiveCandidateCount",r.inconclusiveCandidateCount},
+        {"duplicateAutomataSkipped",r.duplicateAutomataSkipped},{"stopReasons",r.stopReasons},
+        {"baselineMetrics",toJson(r.baselineMetrics)},{"candidates",candidates},
+        {"paretoFrontierIds",r.paretoFrontierIds}};
+}
 }
 std::string runPipelineJson(const std::string& pattern,const std::string& input) { return toJson(runPipeline(pattern,input)).dump(); }
 
@@ -92,26 +138,58 @@ std::string runGrowthAnalysisJson(const std::string& pattern) {
     ParseResult parsed = parse(pattern);
     json j;
     if (!parsed.ok) { j["ok"]=false; j["error"]=toJson(parsed.error); return j.dump(); }
-    Automaton nfa = thompsonConstruction(parsed.ast);
-    j["ok"]=true; j["analysis"]=toJson(computeGrowthAnalysis(nfa));
-    return j.dump();
+    try {
+        Automaton nfa = thompsonConstruction(parsed.ast);
+        j["ok"]=true; j["analysis"]=toJson(computeGrowthAnalysis(nfa));
+        return j.dump();
+    } catch (const AutomatonTooComplexError& error) {
+        return complexityFailure(error);
+    }
 }
 
 std::string verifyCandidateJson(const std::string& pattern, int edgeSource, int edgeTarget) {
     ParseResult parsed = parse(pattern);
     json j;
     if (!parsed.ok) { j["ok"]=false; j["error"]=toJson(parsed.error); return j.dump(); }
-    Automaton nfa = thompsonConstruction(parsed.ast);
-    CandidateEdit edit{CandidateEditKind::DeleteEpsilonEdge, CandidateEdgeId{edgeSource, "eps", edgeTarget}, {}};
-    j["ok"]=true; j["candidate"]=toJson(verifyCandidate(nfa, edit));
-    return j.dump();
+    try {
+        Automaton nfa = thompsonConstruction(parsed.ast);
+        // Unlike verifyCandidateEdgesJson, this single-edge entry point used to
+        // build the edit straight from the caller's (edgeSource, edgeTarget)
+        // with no check that such an epsilon edge actually exists in the NFA.
+        // applyCandidateEdit() silently no-ops on an edge it can't find, so an
+        // out-of-range or stale edge id would produce a "candidate" identical
+        // to the baseline -- which checkEquivalence then reports as
+        // "equivalent", falsely implying a verified, safe deletion when
+        // nothing was deleted. Require the edge to be a real, eligible
+        // epsilon edge first, exactly like the multi-edge path does.
+        const std::vector<CandidateEdgeId> eligible = listEligibleEpsilonEdges(nfa);
+        const bool isEligible = std::any_of(eligible.begin(), eligible.end(), [&](const CandidateEdgeId& edge) {
+            return edge.source == edgeSource && edge.target == edgeTarget;
+        });
+        if (!isEligible) {
+            return json{{"ok", false}, {"error", {
+                {"type", "InvalidCandidateEdit"},
+                {"message", "The selected epsilon edge does not exist in the baseline NFA."}
+            }}}.dump();
+        }
+        CandidateEdit edit{CandidateEditKind::DeleteEpsilonEdge, CandidateEdgeId{edgeSource, "eps", edgeTarget}, {}};
+        j["ok"]=true; j["candidate"]=toJson(verifyCandidate(nfa, edit));
+        return j.dump();
+    } catch (const AutomatonTooComplexError& error) {
+        return complexityFailure(error);
+    }
 }
 
 std::string verifyCandidateEdgesJson(const std::string& pattern, const std::string& edgesJson) {
     ParseResult parsed = parse(pattern);
     if (!parsed.ok) return json{{"ok", false}, {"error", toJson(parsed.error)}}.dump();
 
-    Automaton nfa = thompsonConstruction(parsed.ast);
+    Automaton nfa;
+    try {
+        nfa = thompsonConstruction(parsed.ast);
+    } catch (const AutomatonTooComplexError& error) {
+        return complexityFailure(error);
+    }
     json requested;
     try {
         requested = json::parse(edgesJson);
@@ -172,5 +250,33 @@ std::string verifyCandidateEdgesJson(const std::string& pattern, const std::stri
     edit.kind = CandidateEditKind::DeleteEpsilonEdges;
     edit.edges = std::move(edges);
     return json{{"ok", true}, {"candidate", toJson(verifyCandidate(nfa, edit))}}.dump();
+}
+
+std::string runBoundedOptimizationJson(const std::string& pattern, int maxEditDepth, int maxCandidates) {
+    ParseResult parsed = parse(pattern);
+    if (!parsed.ok) return json{{"ok", false}, {"error", toJson(parsed.error)}}.dump();
+
+    try {
+        Automaton nfa = thompsonConstruction(parsed.ast);
+        BoundedSearchLimits limits;
+        // Embind's int parameters can't carry TypeScript's real `undefined` —
+        // there's no way for a JS caller to say "I didn't specify this" the
+        // way the pure-TS searchBoundedEpsilonDeletions(nfa, { maxEditDepth?
+        // }) can. So this bridge uses "<= 0 means not specified, keep
+        // BoundedSearchLimits{}'s own default" as its own, separate
+        // convention for this boundary. That's a deliberate difference from
+        // TS's internal boundedInteger() (bounded-optimization.ts), which
+        // treats an explicit 0 as a real request and clamps it to the
+        // minimum valid depth of 1 rather than falling back to the default
+        // of 2 — the two aren't meant to agree on the meaning of exactly
+        // zero, only on every value >= 1, and no caller in this codebase
+        // (the frontend, or the differential/limit tests) ever passes 0 to
+        // mean "depth zero" rather than "use the default".
+        if (maxEditDepth > 0) limits.maxEditDepth = static_cast<std::size_t>(maxEditDepth);
+        if (maxCandidates > 0) limits.maxCandidates = static_cast<std::size_t>(maxCandidates);
+        return json{{"ok", true}, {"search", toJson(searchBoundedEpsilonDeletions(nfa, limits))}}.dump();
+    } catch (const AutomatonTooComplexError& error) {
+        return complexityFailure(error);
+    }
 }
 }

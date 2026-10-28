@@ -23,7 +23,7 @@ classAtom   ::= ASCII_LITERAL | ESCAPE | SHORTHAND
 
 A class range is recognized when a singleton classAtom is followed by a hyphen and another singleton classAtom. Range endpoints are inclusive and ordered by ASCII code point. Shorthands expand to sets and are not valid range endpoints. The parser rejects a descending range such as **[z-a]**, an empty class, and an unterminated class.
 
-The grammar intentionally requires one or more terms and one or more class members. The empty pattern, empty alternatives (**a|**), and empty groups (**()**) are not accepted. `a**`, `a+?`, and other repeated postfix quantifiers are syntax errors; group the expression if a second repetition is intended, e.g. **(a+)?**.
+The grammar intentionally requires one or more terms and one or more class members. The empty pattern, empty alternatives (**a|**), and empty groups (**()**) are not accepted. **a\*\***, **a+?**, and other repeated postfix quantifiers are syntax errors; group the expression if a second repetition is intended, e.g. **(a+)?**.
 
 ## 2. Precedence and associativity
 

@@ -12,10 +12,15 @@
 // thompson-pass.ts's header comment for the full rationale behind the
 // CharacterSetNode/PlusNode/OptionalNode fragment rules below — this file
 // mirrors them exactly, one `if constexpr` branch per new AST node kind.
+//
+// NFA-state guard: see thompson-pass.ts's header comment for why plus's
+// two-copies-per-level growth needs an exact, saturating state-count
+// estimate (estimateStateCount below) checked before buildFragment runs.
 
 #include "regexlab/passes/thompson-pass.hpp"
 #include "regexlab/character-set.hpp"
 
+#include <cstddef>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -33,6 +38,49 @@ struct Fragment {
     Fragment(int startState, int acceptState, std::vector<int> exits = {})
         : start(startState), accept(acceptState), inlineExits(std::move(exits)) {}
 };
+
+constexpr std::size_t kMaxNfaStates = 2048;
+
+/** left + right, saturating at kMaxNfaStates + 1 instead of overflowing. */
+std::size_t cappedAdd(std::size_t left, std::size_t right) {
+    if (left > kMaxNfaStates || right > kMaxNfaStates - left) return kMaxNfaStates + 1;
+    return left + right;
+}
+
+/** value * 2, saturating at kMaxNfaStates + 1 instead of overflowing. */
+std::size_t cappedDouble(std::size_t value) {
+    return value > kMaxNfaStates / 2 ? kMaxNfaStates + 1 : value * 2;
+}
+
+/**
+ * Counts the exact number of states buildFragment will allocate for this
+ * AST, without building it — mirrors buildFragment's own per-node-kind
+ * arithmetic (two states per leaf, child's count plus two wrapper states
+ * for star/optional/alt, double the child's count for plus). Saturating
+ * arithmetic (cappedAdd/cappedDouble) keeps this walk itself cheap even
+ * for the pathological nesting shapes it exists to catch.
+ */
+std::size_t estimateStateCount(const ASTNodePtr& node, bool inlineTerminalPlus = false) {
+    if (!node) return kMaxNfaStates + 1;
+    return std::visit(
+        [&](auto&& n) -> std::size_t {
+            using T = std::decay_t<decltype(n)>;
+
+            if constexpr (std::is_same_v<T, CharNode> || std::is_same_v<T, CharacterSetNode>) {
+                return 2;
+            } else if constexpr (std::is_same_v<T, ConcatNode>) {
+                return cappedAdd(estimateStateCount(n.left, true),
+                                  estimateStateCount(n.right, inlineTerminalPlus));
+            } else if constexpr (std::is_same_v<T, AltNode>) {
+                return cappedAdd(cappedAdd(estimateStateCount(n.left), estimateStateCount(n.right)), 2);
+            } else if constexpr (std::is_same_v<T, StarNode> || std::is_same_v<T, OptionalNode>) {
+                return cappedAdd(estimateStateCount(n.child), 2);
+            } else {
+                return cappedAdd(cappedDouble(estimateStateCount(n.child)), inlineTerminalPlus ? 0 : 1);
+            }
+        },
+        node->node);
+}
 
 class NFABuilder {
 public:
@@ -153,6 +201,12 @@ Fragment buildFragment(const ASTNodePtr& node, NFABuilder& builder, bool inlineT
 }  // namespace
 
 Automaton thompsonConstruction(const ASTNodePtr& ast) {
+    const std::size_t estimatedStates = estimateStateCount(ast);
+    if (estimatedStates > kMaxNfaStates) {
+        throw AutomatonTooComplexError(
+            "Thompson construction would exceed the safe limit of 2,048 NFA states.");
+    }
+
     NFABuilder builder;
     Fragment fragment = buildFragment(ast, builder);
     return builder.build(fragment.start, fragment.accept);

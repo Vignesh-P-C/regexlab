@@ -73,3 +73,12 @@ describe("SubsetConstructionPass — determinism sanity check", () => {
     }
   });
 });
+describe("subsetConstruction safety limits", () => {
+  it("returns a clear limit error instead of running determinization without a budget", () => {
+    const parsed = parse("a|b");
+    if (!parsed.ok) throw new Error("test pattern failed to parse");
+    const nfa = thompsonConstruction(parsed.ast);
+    expect(() => subsetConstruction(nfa, { maxDfaStates: 100, maxWorkUnits: 0 }))
+      .toThrow(/determinization exceeded its safety limits/i);
+  });
+});

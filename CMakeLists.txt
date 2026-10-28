@@ -48,6 +48,7 @@ add_library(regexlab_engine STATIC
     engine/candidate.cpp
     engine/equivalence.cpp
     engine/growth-analysis.cpp
+    engine/bounded-optimization.cpp
 )
 target_include_directories(regexlab_engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/engine/include
@@ -72,6 +73,7 @@ add_executable(engine_tests
     tests/json_bridge_test.cpp
     tests/parser_cases_fixture_test.cpp
     tests/growth_analysis_test.cpp
+    tests/bounded_optimization_test.cpp
 )
 target_link_libraries(engine_tests PRIVATE regexlab_engine Catch2::Catch2WithMain)
 target_compile_options(engine_tests PRIVATE ${REGEXLAB_WARNING_FLAGS})

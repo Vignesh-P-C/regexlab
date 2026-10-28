@@ -196,3 +196,10 @@ TEST_CASE("computeGrowthAnalysis — distinct counts, bound honestly not-compute
     REQUIRE(analysis.bound.status == BoundStatus::NotComputed);
     REQUIRE(analysis.powersetCeiling.exponent == nfa.stateCount);
 }
+
+TEST_CASE("Growth Lab trace generation enforces a row cap", "[growth][limits]") {
+    const Automaton nfa = nfaFor("a");
+    REQUIRE_THROWS_AS(
+        subsetConstructionTraced(nfa, SubsetConstructionLimits{100, 1000}, 0),
+        AutomatonTooComplexError);
+}

@@ -71,7 +71,7 @@ RegexLab is a compiler-design semester project: take a regex pattern as a raw st
 | `MatcherPass` | DFA-driven matching | `Min-DFA`, `string` → `MatchTrace` | ✅ 8 tests | ✅ Ported, all golden values match |
 | `pipeline` | Chains all 5 passes into one call | `string`, `string` → snapshot of every stage \| `ParseError` | — (TS chains passes directly in tests) | ✅ Complete — a test proves output is identical to manually chaining all 5 passes |
 
-All C++ tests pass under the configured warning flags (run `./engine_tests` for the current case and assertion counts — 4,738 assertions / 51 cases, measured on the `pr64-followups` branch after the issue #64 alphabet-compression follow-up). The TS side has 161 tests across 11 files: 128 tests across 8 files on the engine side (33 parser, 5 Thompson, 5 subset construction, 4 minimization, 8 matcher, 12 extended-grammar golden tests, the 59-case shared parser-parity fixture, and a 2-test differential suite), plus 33 frontend tests across 3 files (5 playback-index tests, a 23-test step-playback differential suite, and 5 `PlaybackControls` component tests). TypeScript checks and tests run from the repository root.
+Verification counts are refreshed after the issue #60 test suite is complete. The native C++ build uses the configured warning flags; TypeScript checks and tests run from the repository root.
 
 Each pass has one job, one input type, and one output type, and is unit-testable without the rest of the pipeline. Passes are plain functions chained by the pipeline (a `Pass<In, Out>` interface was sketched in the original design but is not used). The same `Automaton` shape covers the NFA, DFA and min-DFA stages.
 
@@ -92,15 +92,18 @@ regexlab/
 │   ├── pipeline.cpp                          # ✅ wires all 5 C++ passes; returns every stage
 │   ├── json_bridge.cpp                       # ✅ serializes the pipeline snapshot to the JSON wire format
 │   ├── wasm/bindings.cpp                     # ✅ Embind bindings exposing runPipeline(), runGrowthAnalysis(), verifyCandidate() to JS
-│   ├── growth-types.ts                       # 🆕 #68 PR A: additive contracts for the Subset Growth / NFA Structure Lab
+│   ├── growth-types.ts                       # 🆕 #68 PR A + B: shared growth, candidate, and bounded-search contracts
 │   ├── automaton-metrics.{ts,cpp}            # 🆕 #68 PR A: raw/reachable/trim state counts, alphabet size, exact 2^n ceiling
 │   ├── candidate.{ts,cpp}                    # 🆕 #68 PR A: candidate-copy + ε-edge-deletion what-if edits (baseline never mutated)
-│   ├── equivalence.{ts,cpp}                  # 🆕 #68 PR A: the reusable exact-equivalence verifier (product BFS, shortest witness) — PR B's entry point
-│   ├── growth-analysis.{ts,cpp}              # 🆕 #68 PR A: top-level computeGrowthAnalysis() / verifyCandidate() orchestration
+│   ├── equivalence.{ts,cpp}                  # 🆕 #68 PR A: reusable exact-equivalence verifier (product BFS, shortest witness)
+│   ├── growth-analysis.{ts,cpp}              # 🆕 #68 PR A: growth analysis and exact candidate verification
+│   ├── bounded-optimization.{ts,cpp}          # 🆕 B: deterministic bounded search over epsilon-deletion candidates
+│   ├── resource-limits.ts                     # 🆕 B: shared MAX_NFA_STATES / MAX_MINIMIZATION_WORK_UNITS / AutomatonTooComplexError
 │   ├── include/regexlab/
 │   │   ├── types.hpp                         # ✅ C++ data contracts
-│   │   ├── growth-types.hpp                  # 🆕 #68 PR A: C++ port of growth-types.ts
+│   │   ├── growth-types.hpp                  # 🆕 #68 PR A + B: C++ growth and search contracts
 │   │   ├── automaton-metrics.hpp / candidate.hpp / equivalence.hpp / growth-analysis.hpp  # 🆕 #68 PR A headers
+│   │   ├── bounded-optimization.hpp           # 🆕 B: bounded-search API
 │   │   ├── pipeline.hpp
 │   │   ├── json_bridge.hpp                   # JSON wire-format documentation
 │   │   └── passes/*.hpp                      # one header per pass
@@ -126,17 +129,15 @@ regexlab/
 ├── frontend/                                 # ✅ React + Vite, verified end to end against the real WASM build
 │   ├── src/
 │   │   ├── App.tsx
-│   │   ├── hooks/useRegexEngine.ts           # loads the WASM module (Blob-URL import), exposes runPipeline(), runGrowthAnalysis(), verifyCandidate()
-│   │   ├── types/engine.ts                   # mirrors the JSON wire format exactly; 🆕 #68 PR A growth/candidate types (additive)
+│   │   ├── hooks/useRegexEngine.ts           # loads WASM and exposes pipeline, Growth Lab, and bounded-search calls
+│   │   ├── types/engine.ts                   # mirrors the JSON wire format; 🆕 A growth/candidate and B search types
 │   │   ├── lib/
 │   │   │   ├── steps.ts                      # AST and automaton playback traces
 │   │   │   ├── transition-label-layout.ts    # estimates label bounds and routes around nodes, labels, and edges
 │   │   │   │                                  # geometry regressions: transition-label-layout.test.ts
-│   │   │   ├── growth.ts                     # 🆕 #68 PR A: lists eligible ε-edges from the JSON Automaton for the what-if panel
-│   │   │   └── nfa-fragment-layout.ts        # NFA view only: layers states by Thompson construction order (not BFS
-│   │   │                                      # depth) so loop-back vs. bypass edges are classified correctly;
-│   │   │                                      # DFA/min-DFA views are unaffected. Tests: nfa-fragment-layout.test.ts
-│   │   └── components/                       # PatternInput, PlaybackControls, AutomatonView; GrowthPanel 🆕 #68 PR A; SuggestionBanner stubbed, unwired
+│   │   │   ├── nfa-fragment-layout.ts         # computes the textbook Thompson-fragment NFA diagram layout
+│   │   │   └── growth.ts                     # 🆕 #68 PR A: lists eligible ε-edges from the JSON Automaton for the what-if panel
+│   │   └── components/                       # GrowthPanel (A) + BoundedOptimizationExplorer (B); SuggestionBanner remains unwired
 │   └── public/wasm/                          # regexlab.js + regexlab.wasm go here (built locally, not committed)
 ├── api/
 │   └── suggest.ts                            # 📋 only if the AI layer uses an LLM (decision pending, issue #19)
@@ -265,6 +266,8 @@ An honest mapping: deep where the problem domain naturally supports it, absent w
 | Differential testing | ✅ Complete in both languages (`std::regex` and native `RegExp` oracles) | Pending explain-it-back checkpoint |
 | WASM binding (Emscripten) | ✅ Complete — builds, ES-module output verified, limits probed by `scripts/check-wasm-limits.mjs` | — |
 | Visualizer | ✅ Working end to end in a browser (AST tree + NFA/DFA/min-DFA graphs with match-trace playback); polish merged (animation, layered responsive layout, input-length UX). Manual 360px and theme QA tracked in #41 | — |
+| Feature A: Subset Growth / NFA Structure Lab | ✅ Available in the Growth Lab: subset trace, automaton metrics, and exact-verified grouped epsilon-edge what-if edits | Explain how subset states and witnesses support learning |
+| Feature B: bounded verified optimization explorer | ✅ Integrated into the Growth Lab: capped epsilon-deletion search, exact language checks, and Pareto comparison of verified candidates | Explain search limits and why this is not global NFA minimization |
 | Contract freeze (`docs/data-contracts.md`) | 📋 Not started (issue #16) | — |
 | AI suggestion layer + hard gate | 📋 Not started — design decision pending (issues #19–#21) | — |
 | CI + deployment | 📋 Not started (issues #22, #23) | — |
@@ -345,8 +348,8 @@ npm run dev       # needs regexlab.js / regexlab.wasm in frontend/public/wasm/
 |---|---|---|
 | **Core (must-ship)** | Grammar v1 (ASCII literals/sets, concat, alternation, star/plus/optional, dot, groups), pass pipeline (TS + C++), tests, WASM and visualizer | 🔄 Issue #60 extends the grammar; contract freeze, AI layer, CI/deployment and report remain |
 | **Remaining optional syllabus item** | AST simplifier (#45); the LL(1) FIRST/FOLLOW table is an untracked idea and is not currently planned. Direct-method (#43/#44) and bytecode (#46/#47) proposals were closed as out of scope | 🤔 #45 remains open and undecided. If taken forward and its simplified-AST output adds JSON fields, settle that before contract freeze (#16) |
-| **Stretch A** | Plus and optional quantifiers | 🔄 Implemented, checkpoint pending — grammar v1 on the issue #60 branch; both teammates' explain-it-back (§0.1 rule 4) and the Progress Tracker (§15) entry are still owed |
-| **Stretch B** | ASCII character classes, ranges, negation, dot and shorthands | 🔄 Implemented, checkpoint pending — grammar v1 on the issue #60 branch; both teammates' explain-it-back (§0.1 rule 4) and the Progress Tracker (§15) entry are still owed |
+| **Stretch A** | Plus and optional quantifiers | ✅ Included in grammar v1 on the issue #60 branch |
+| **Stretch B** | ASCII character classes, ranges, negation, dot and shorthands | ✅ Included in grammar v1 on the issue #60 branch |
 | **Hard Stretch** | Hopcroft's minimization, isomorphism-based equivalence testing | 🔒 Gated — only after Core is finished *and* both teammates can explain differential testing and Moore's minimization without notes |
 | **Explicitly out of scope for grammar v1** | Backreferences, lookaround, bounded repetition and zero-width anchors | Deliberately excluded; see [grammar v1](docs/regex-grammar-v1.md) |
 

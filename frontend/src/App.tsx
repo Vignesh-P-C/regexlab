@@ -7,13 +7,19 @@ import { TestStringStrip } from "./components/TestStringStrip";
 import { GrowthPanel } from "./components/GrowthPanel";
 import { useRegexEngine } from "./hooks/useRegexEngine";
 import type { PipelineSnapshot, Stage } from "./types/engine";
-import { computeInputPlaybackSteps, computeAstSteps, PLAYBACK_MAX_CHARS, type Step } from "./lib/steps";
+import {
+  computeInputPlaybackSteps,
+  computeAstSteps,
+  withPlaybackDeadState,
+  PLAYBACK_MAX_CHARS,
+  type Step,
+} from "./lib/steps";
 import { clampStepIndex } from "./lib/playbackIndex";
 
 const DEBOUNCE_MS = 150;
 
 function App() {
-  const { state, runPipeline, runGrowthAnalysis, verifyCandidateEdges } = useRegexEngine();
+  const { state, runPipeline, runGrowthAnalysis, verifyCandidateEdges, runBoundedOptimization } = useRegexEngine();
   const [pattern, setPattern] = useState("(a|b)*ab");
   const [input, setInput] = useState("aab");
   const [snapshot, setSnapshot] = useState<PipelineSnapshot | null>(null);
@@ -110,6 +116,19 @@ function App() {
     return snapshot[activeStage];
   }, [snapshot, activeStage]);
 
+  const currentInputStep =
+    activeStage !== "ast" && activeSteps ? activeSteps[clampedInputIndex] : null;
+  const deadStateId =
+    (activeStage === "dfa" || activeStage === "minDfa") &&
+    currentInputStep?.verdict === "stuck" &&
+    automatonForStage
+      ? automatonForStage.stateCount
+      : null;
+  const automatonForView = useMemo(() => {
+    if (!automatonForStage || !currentInputStep || deadStateId === null) return automatonForStage;
+    return withPlaybackDeadState(automatonForStage, currentInputStep);
+  }, [automatonForStage, currentInputStep, deadStateId]);
+
   return (
     <div className="app">
       <h1>RegexLab</h1>
@@ -146,10 +165,11 @@ function App() {
           <AutomatonView
             stage={activeStage}
             ast={snapshot.ast}
-            automaton={automatonForStage}
+            automaton={automatonForView}
             activeStates={activeStates}
             traversedEdges={traversedEdges}
             astNodeIndex={astNodeIndex}
+            deadStateId={deadStateId}
           />
           {activeStage !== "ast" && !tooLong && overallVerdict && (
             <TestStringStrip input={input} steps={activeSteps ?? []} stepIndex={clampedInputIndex} verdict={overallVerdict} />
@@ -163,6 +183,7 @@ function App() {
             nfa={snapshot.nfa}
             runGrowthAnalysis={runGrowthAnalysis}
             verifyCandidate={(currentPattern, edges) => verifyCandidateEdges(currentPattern, JSON.stringify(edges))}
+            runBoundedOptimization={runBoundedOptimization}
           />
         </>
       )}

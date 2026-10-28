@@ -149,11 +149,11 @@ export function computeNfaSteps(nfa: Automaton, input: string): Step[] {
 /**
  * DFA / min-DFA playback (#52): one state per step, start state at step 0.
  * A missing transition is this engine's only representation of a dead
- * state (subset-construction-pass.ts never adds an explicit trap state --
- * "no transition on this symbol -> implicit dead state, omitted") so
- * "missing transition" and "stuck" are the same thing here; playback
- * records one terminal "stuck on 'x'" step and stops, same "never
- * backtracks" rule as matcher-pass.ts.
+ * state (subset-construction-pass.ts omits the empty-subset transition --
+ * "no transition on this symbol -> implicit dead state, omitted"). The
+ * playback trace records the failed symbol and a synthetic sink-state ID;
+ * the view adds the corresponding explicit node only while displaying that
+ * failed step. The engine automaton and matcher semantics remain unchanged.
  *
  * Shared by the DFA and min-DFA tabs -- same Automaton shape, same rule.
  * Equals engine/passes/matcher-pass.ts's own MatchTrace step-for-step on
@@ -192,12 +192,17 @@ export function computeDfaSteps(dfa: Automaton, input: string, nfaForCaption?: A
     const destination = dfa.transitions[String(current)]?.[char]?.[0];
 
     if (destination === undefined) {
+      // DFA construction omits transitions whose target would be the empty
+      // subset. For playback only, represent that missing transition as an
+      // explicit rejecting sink, so the failed character has a visible
+      // destination instead of making the active-state highlight disappear.
+      const deadState = dfa.stateCount;
       steps.push({
         index: steps.length,
         char,
-        activeStates: [],
-        traversedEdges: [],
-        caption: `stuck on '${char}' (no transition from state ${current})`,
+        activeStates: [deadState],
+        traversedEdges: [{ from: current, to: deadState, label: char }],
+        caption: "stuck on '" + char + "': no transition from state " + current + "; enters ⊥ (dead state)",
         verdict: "stuck",
       });
       return steps;
@@ -217,6 +222,42 @@ export function computeDfaSteps(dfa: Automaton, input: string, nfaForCaption?: A
   }
 
   return steps;
+}
+
+/**
+ * Add a display-only rejecting sink for a failed DFA/min-DFA playback step.
+ * The engine automaton remains untouched: its missing transition is still
+ * the actual rejection condition. The synthetic sink makes that implicit
+ * behavior visible as a transition to ⊥ followed by a Σ self-loop.
+ */
+export function withPlaybackDeadState(automaton: Automaton, step: Step): Automaton {
+  const deadState = automaton.stateCount;
+  const edge = step.traversedEdges[0];
+  if (
+    step.verdict !== "stuck" ||
+    step.char === null ||
+    step.activeStates.length !== 1 ||
+    step.activeStates[0] !== deadState ||
+    !edge ||
+    edge.to !== deadState
+  ) {
+    return automaton;
+  }
+
+  const transitions: Automaton["transitions"] = Object.fromEntries(
+    Object.entries(automaton.transitions).map(([state, bySymbol]) => [state, { ...bySymbol }]),
+  );
+  transitions[String(edge.from)] = {
+    ...(transitions[String(edge.from)] ?? {}),
+    [step.char]: [deadState],
+  };
+  transitions[String(deadState)] = { "Σ": [deadState] };
+
+  return {
+    ...automaton,
+    stateCount: deadState + 1,
+    transitions,
+  };
 }
 
 /** Build the three input-driven visualizer traces only when playback is

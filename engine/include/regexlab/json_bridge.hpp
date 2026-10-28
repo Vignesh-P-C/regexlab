@@ -36,10 +36,12 @@ namespace regexlab {
  * Shape on parse failure:
  *   {"ok": false, "error": {"type": "UnmatchedParen" | "UnexpectedToken" |
  *                             "EmptyGroup" | "DanglingOperator" |
- *                             "PatternTooComplex",
+ *                             "PatternTooComplex" | "InvalidCharacterClass" |
+ *                             "AutomatonTooComplex",
  *                             "position": number,
  *                             "expected": null | string,
- *                             "found": null | string}}
+ *                             "found": null | string,
+ *                             "message": optional string for engine safety limits}}
  */
 std::string runPipelineJson(const std::string& pattern, const std::string& input);
 
@@ -70,5 +72,9 @@ std::string verifyCandidateJson(const std::string& pattern, int edgeSource, int 
  * duplicate, or non-existent edges.
  */
 std::string verifyCandidateEdgesJson(const std::string& pattern, const std::string& edgesJson);
+
+/** Run the deterministic bounded epsilon-deletion search. */
+std::string runBoundedOptimizationJson(
+    const std::string& pattern, int maxEditDepth = 2, int maxCandidates = 24);
 
 }  // namespace regexlab
