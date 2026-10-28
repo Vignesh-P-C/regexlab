@@ -1,0 +1,635 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>RegexLab Course Project Report</title>
+<style>
+  @page { size: A4; margin: 25mm 25mm 25mm 25mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Times New Roman", "Liberation Serif", serif; font-size: 12pt; line-height: 1.15; color:#000; margin:0; }
+  .cover, .frontpage { line-height: 1.5; }
+  h1.chapter { font-size: 16pt; font-weight:bold; text-align:center; margin: 0 0 18pt 0; }
+  h2.section { font-size: 13pt; font-weight:bold; margin: 16pt 0 8pt 0; }
+  h3.subsection { font-size: 12pt; font-weight:bold; margin: 12pt 0 6pt 0; }
+  p { margin: 0 0 8pt 0; text-align: justify; }
+  .page-start { page-break-before: always; }
+  .cover { page-break-before: always; text-align:center; }
+  table { border-collapse: collapse; width:100%; margin: 6pt 0 10pt 0; font-size: 11pt; }
+  table, th, td { border: 0.75pt solid #000; }
+  th, td { padding: 4pt 6pt; vertical-align: top; }
+  caption { font-size: 10pt; }
+  .tbl-caption { font-size:10pt; text-align:left; margin: 8pt 0 2pt 0; font-weight:bold; }
+  .fig-caption { font-size:10pt; text-align:center; margin: 4pt 0 10pt 0; font-weight:bold; }
+  .fig-box { border: 0.75pt solid #000; padding: 6pt; margin: 10pt auto; display:block; }
+  .toc-row, .lof-row, .lot-row { display:flex; justify-content:space-between; margin:3pt 0; font-size:11.5pt; }
+  .toc-row.sub { padding-left: 18pt; font-size: 11pt; }
+  .toc-row.sub2 { padding-left: 36pt; font-size: 10.5pt; }
+  .dots { border-bottom: 0.5pt dotted #000; flex:1; margin: 0 4pt; height: 10pt; }
+  .center { text-align:center; }
+  .bold { font-weight:bold; }
+  code, pre { font-family: "Consolas","Courier New",monospace; font-size: 9.5pt; }
+  pre { background:#f5f5f5; border:0.5pt solid #999; padding:8pt; white-space:pre-wrap; overflow-wrap:break-word; }
+  .refs li { margin-bottom:6pt; font-size:11.5pt; }
+  .small { font-size: 10pt; }
+  .todo { color:#b00; font-weight:bold; }
+  svg text { font-family: "Times New Roman","Liberation Serif",serif; }
+  .wordcount { font-size:10pt; font-style:italic; text-align:right; }
+  #abstract-text, #abstract-text ~ p { margin: 0 0 6pt 0; line-height: 1.1; }
+</style>
+</head>
+<body>
+
+<!-- =============== COVER =============== -->
+<section class="cover" style="padding-top:40mm;">
+  <p style="font-size:14pt; font-weight:bold; margin-bottom:0;">VELLORE INSTITUTE OF TECHNOLOGY</p>
+  <p style="font-size:11pt;">(Deemed to be University under Section 3 of UGC Act, 1956)</p>
+  <div style="margin-top:50pt;"></div>
+  <p style="font-size:15pt; font-weight:bold; line-height:1.4;">REGEXLAB: AN INTERACTIVE<br>REGULAR-EXPRESSION-TO-AUTOMATA<br>COMPILER PIPELINE WITH VERIFIED<br>NFA OPTIMIZATION</p>
+  <div style="margin-top:30pt;"></div>
+  <p>A Project Report submitted in partial fulfilment of the requirements for the course</p>
+  <p class="bold">BCSE307P &ndash; Compiler Design Project</p>
+  <div style="margin-top:30pt;"></div>
+  <p class="bold">by</p>
+  <p>Vignesh P C (24BCE0695)</p>
+  <p>Coppisetty Venkat Sai Ujwal (24BCE0667)</p>
+  <div style="margin-top:30pt;"></div>
+  <p>Under the guidance of</p>
+  <p class="bold">Dr. Islabudeen M<br>Associate Professor Grade 1, SCOPE</p>
+  <div style="margin-top:40pt;"></div>
+  <p style="font-weight:bold;">SCHOOL OF COMPUTER SCIENCE AND ENGINEERING</p>
+  <p>October 2026</p>
+</section>
+
+<!-- =============== DECLARATION =============== -->
+<section class="frontpage page-start">
+  <h2 class="section center">DECLARATION</h2>
+  <p>We hereby declare that the project report entitled <span class="bold">"REGEXLAB: AN INTERACTIVE REGULAR-EXPRESSION-TO-AUTOMATA COMPILER PIPELINE WITH VERIFIED NFA OPTIMIZATION"</span> submitted by us to Vellore Institute of Technology, Vellore in partial fulfilment of the requirement for the award of the degree of B.Tech. in Computer Science and Engineering, under the course BCSE307P, is a record of bona fide project work carried out by us under the guidance of Dr. Islabudeen M. We further declare that the work reported in this report has not been submitted, either in part or in full, for the award of any other degree or diploma in this institute or any other institute or university.</p>
+  <div style="margin-top:40pt;"></div>
+  <p>Place: Vellore</p>
+  <p>Date: 28 October 2026</p>
+  <div style="margin-top:20pt;"></div>
+  <p>Vignesh P C (24BCE0695)</p>
+  <p>Coppisetty Venkat Sai Ujwal (24BCE0667)</p>
+</section>
+
+<!-- =============== ACKNOWLEDGEMENT =============== -->
+<section class="frontpage page-start">
+  <h2 class="section center">ACKNOWLEDGEMENT</h2>
+  <p>We owe a real debt of thanks to our project guide, <span class="bold">Dr. Islabudeen M</span>, Associate Professor Grade 1, School of Computer Science and Engineering (SCOPE), for his guidance, his patience through several design changes, and feedback that consistently pushed us to verify a claim rather than simply assert it.</p>
+  <p>We thank <span class="bold">Dr. Jaisankar N</span>, Dean, School of Computer Science and Engineering, for the infrastructure and the academic environment that made a project of this scope possible in the first place.</p>
+  <p>We are also grateful to the faculty of the Compiler Design course (BCSE307P) for a project format that let us learn lexical and syntax analysis by building something real with it instead of only reading about it, and to our families and friends for their patience and support while we were, more than once, up late arguing about whether a DFA state was really reachable.</p>
+</section>
+
+<!-- =============== TABLE OF CONTENTS =============== -->
+<section class="frontpage page-start">
+  <h2 class="section center">TABLE OF CONTENTS</h2>
+  <div class="toc-row bold"><span>DECLARATION</span><span class="dots"></span><span class="pg" data-key="decl">2</span></div>
+  <div class="toc-row bold"><span>ACKNOWLEDGEMENT</span><span class="dots"></span><span class="pg" data-key="ack">3</span></div>
+  <div class="toc-row bold"><span>LIST OF FIGURES</span><span class="dots"></span><span class="pg" data-key="lof">5</span></div>
+  <div class="toc-row bold"><span>LIST OF TABLES</span><span class="dots"></span><span class="pg" data-key="lot">6</span></div>
+  <div class="toc-row bold"><span>LIST OF ABBREVIATIONS</span><span class="dots"></span><span class="pg" data-key="abbr">7</span></div>
+  <div class="toc-row bold"><span>SYMBOLS AND NOTATIONS</span><span class="dots"></span><span class="pg" data-key="sym">8</span></div>
+  <div class="toc-row bold"><span>ABSTRACT</span><span class="dots"></span><span class="pg" data-key="abs">9</span></div>
+  <div class="toc-row bold"><span>1. INTRODUCTION</span><span class="dots"></span><span class="pg" data-key="ch1">10</span></div>
+  <div class="toc-row sub"><span>1.1 Background</span><span class="dots"></span><span class="pg" data-key="ch1-1">10</span></div>
+  <div class="toc-row sub"><span>1.2 Motivations</span><span class="dots"></span><span class="pg" data-key="ch1-2">10</span></div>
+  <div class="toc-row sub"><span>1.3 Scope</span><span class="dots"></span><span class="pg" data-key="ch1-3">10</span></div>
+  <div class="toc-row bold"><span>2. PROJECT DESCRIPTION AND GOALS</span><span class="dots"></span><span class="pg" data-key="ch2">11</span></div>
+  <div class="toc-row sub"><span>2.1 Literature Review</span><span class="dots"></span><span class="pg" data-key="ch2-1">11</span></div>
+  <div class="toc-row sub"><span>2.2 Research Gap</span><span class="dots"></span><span class="pg" data-key="ch2-2">11</span></div>
+  <div class="toc-row sub"><span>2.3 Objectives</span><span class="dots"></span><span class="pg" data-key="ch2-3">11</span></div>
+  <div class="toc-row sub"><span>2.4 Problem Statement</span><span class="dots"></span><span class="pg" data-key="ch2-4">11</span></div>
+  <div class="toc-row sub"><span>2.5 Project Plan</span><span class="dots"></span><span class="pg" data-key="ch2-5">12</span></div>
+  <div class="toc-row bold"><span>3. TECHNICAL SPECIFICATION</span><span class="dots"></span><span class="pg" data-key="ch3">13</span></div>
+  <div class="toc-row sub"><span>3.1 Functional and Non-functional Requirements</span><span class="dots"></span><span class="pg" data-key="ch3-1">13</span></div>
+  <div class="toc-row sub"><span>3.2 Feasibility Study</span><span class="dots"></span><span class="pg" data-key="ch3-2">13</span></div>
+  <div class="toc-row sub"><span>3.3 Hardware and Software Specification</span><span class="dots"></span><span class="pg" data-key="ch3-3">13</span></div>
+  <div class="toc-row bold"><span>4. DESIGN APPROACH AND DETAILS</span><span class="dots"></span><span class="pg" data-key="ch4">15</span></div>
+  <div class="toc-row sub"><span>4.1 System Architecture</span><span class="dots"></span><span class="pg" data-key="ch4-1">15</span></div>
+  <div class="toc-row sub"><span>4.2 Data Flow, Use Case, Class and Sequence Diagrams</span><span class="dots"></span><span class="pg" data-key="ch4-2">15</span></div>
+  <div class="toc-row bold"><span>5. METHODOLOGY AND TESTING</span><span class="dots"></span><span class="pg" data-key="ch5">17</span></div>
+  <div class="toc-row sub"><span>5.1 Module Description, per Pass</span><span class="dots"></span><span class="pg" data-key="ch5-1">17</span></div>
+  <div class="toc-row sub"><span>5.2 Complexity and Resource Guards</span><span class="dots"></span><span class="pg" data-key="ch5-2">17</span></div>
+  <div class="toc-row sub"><span>5.3 Testing Strategy</span><span class="dots"></span><span class="pg" data-key="ch5-3">18</span></div>
+  <div class="toc-row bold"><span>6. PROJECT DEMONSTRATION</span><span class="dots"></span><span class="pg" data-key="ch6">19</span></div>
+  <div class="toc-row bold"><span>7. RESULT AND DISCUSSION</span><span class="dots"></span><span class="pg" data-key="ch7">20</span></div>
+  <div class="toc-row bold"><span>8. CONCLUSION AND FUTURE WORK</span><span class="dots"></span><span class="pg" data-key="ch8">22</span></div>
+  <div class="toc-row bold"><span>9. REFERENCES</span><span class="dots"></span><span class="pg" data-key="ch9">23</span></div>
+  <div class="toc-row bold"><span>APPENDIX A &ndash; SAMPLE CODE</span><span class="dots"></span><span class="pg" data-key="appA">24</span></div>
+</section>
+
+<!-- =============== LIST OF FIGURES =============== -->
+<section class="frontpage page-start">
+  <h2 class="section center">LIST OF FIGURES</h2>
+  <div class="lof-row"><span>Figure 4.1 &ndash; System architecture (layered)</span><span class="dots"></span><span>8</span></div>
+  <div class="lof-row"><span>Figure 4.2 &ndash; Data flow diagram (Level 1)</span><span class="dots"></span><span>9</span></div>
+  <div class="lof-row"><span>Figure 4.3 &ndash; Use case diagram</span><span class="dots"></span><span>10</span></div>
+  <div class="lof-row"><span>Figure 4.4 &ndash; Class diagram (core data contracts)</span><span class="dots"></span><span>10</span></div>
+  <div class="lof-row"><span>Figure 4.5 &ndash; Sequence diagram for one compile-and-match request</span><span class="dots"></span><span>11</span></div>
+  <div class="lof-row"><span>Figure 5.1 &ndash; Pass pipeline for pattern (a|b)*abb</span><span class="dots"></span><span>13</span></div>
+  <p class="small" style="margin-top:10pt;"><span class="todo">Note:</span> the figures in this report are schematic diagrams, drawn directly from the project's own source identifiers (file, type, and function names checked against the code), not graphviz or matplotlib output. We have <span class="bold">not yet captured</span> live browser screenshots of the running application (the AST/NFA/DFA/min-DFA views, step playback, the Growth Panel, the optimizer's safe and unsafe witness view). That needs a running dev server and a real browser session, which we plan to do before this report is finalised, and we would rather note the gap here than fake it.</p>
+</section>
+
+<!-- =============== LIST OF TABLES =============== -->
+<section class="frontpage page-start">
+  <h2 class="section center">LIST OF TABLES</h2>
+  <div class="lot-row"><span>Table 3.1 &ndash; Functional requirements</span><span class="dots"></span><span>6</span></div>
+  <div class="lot-row"><span>Table 3.2 &ndash; Non-functional requirements</span><span class="dots"></span><span>7</span></div>
+  <div class="lot-row"><span>Table 3.3 &ndash; Hardware and software specification</span><span class="dots"></span><span>7</span></div>
+  <div class="lot-row"><span>Table 5.1 &ndash; Module description per compiler pass</span><span class="dots"></span><span>12</span></div>
+  <div class="lot-row"><span>Table 5.2 &ndash; Complexity of each pass</span><span class="dots"></span><span>14</span></div>
+  <div class="lot-row"><span>Table 5.3 &ndash; Input guards</span><span class="dots"></span><span>14</span></div>
+  <div class="lot-row"><span>Table 5.4 &ndash; Automated test results</span><span class="dots"></span><span>15</span></div>
+  <div class="lot-row"><span>Table 5.4b &ndash; Compiled-WebAssembly limit-probe suite</span><span class="dots"></span><span>15</span></div>
+  <div class="lot-row"><span>Table 7.1 &ndash; Pipeline state counts for representative patterns</span><span class="dots"></span><span>17</span></div>
+  <div class="lot-row"><span>Table 7.2 &ndash; Minimization stress timings, native build</span><span class="dots"></span><span>18</span></div>
+  <div class="lot-row"><span>Table 7.2b &ndash; Same three patterns, rebuilt WASM module</span><span class="dots"></span><span>18</span></div>
+  <div class="lot-row"><span>Table 7.3 &ndash; Bounded-optimizer safe vs. unsafe deletion examples</span><span class="dots"></span><span>18</span></div>
+  <div class="lot-row"><span>Table 7.4 &ndash; Cost analysis (tooling)</span><span class="dots"></span><span>19</span></div>
+</section>
+
+<!-- =============== ABBREVIATIONS =============== -->
+<section class="frontpage page-start">
+  <h2 class="section center">LIST OF ABBREVIATIONS</h2>
+  <table>
+    <tr><th style="width:20%;">Abbreviation</th><th>Expansion</th></tr>
+    <tr><td>ASCII</td><td>American Standard Code for Information Interchange</td></tr>
+    <tr><td>AST</td><td>Abstract Syntax Tree</td></tr>
+    <tr><td>CI</td><td>Continuous Integration</td></tr>
+    <tr><td>CMake</td><td>Cross-platform Make (build-configuration tool)</td></tr>
+    <tr><td>CSS</td><td>Cascading Style Sheets</td></tr>
+    <tr><td>DFA</td><td>Deterministic Finite Automaton</td></tr>
+    <tr><td>DFD</td><td>Data Flow Diagram</td></tr>
+    <tr><td>HTML</td><td>Hypertext Markup Language</td></tr>
+    <tr><td>IEEE</td><td>Institute of Electrical and Electronics Engineers</td></tr>
+    <tr><td>JSON</td><td>JavaScript Object Notation</td></tr>
+    <tr><td>LALR</td><td>Look-Ahead Left-to-right Rightmost-derivation (parser class)</td></tr>
+    <tr><td>LL(1)</td><td>Left-to-right, Leftmost-derivation, 1 symbol of lookahead</td></tr>
+    <tr><td>NFA</td><td>Nondeterministic Finite Automaton</td></tr>
+    <tr><td>PR</td><td>Pull Request</td></tr>
+    <tr><td>SCOPE</td><td>School of Computer Science and Engineering</td></tr>
+    <tr><td>SVG</td><td>Scalable Vector Graphics</td></tr>
+    <tr><td>TOC</td><td>Table of Contents</td></tr>
+    <tr><td>TS</td><td>TypeScript</td></tr>
+    <tr><td>UML</td><td>Unified Modeling Language</td></tr>
+    <tr><td>VIT</td><td>Vellore Institute of Technology</td></tr>
+    <tr><td>WASM</td><td>WebAssembly</td></tr>
+  </table>
+</section>
+
+<!-- =============== SYMBOLS =============== -->
+<section class="frontpage page-start">
+  <h2 class="section center">SYMBOLS AND NOTATIONS</h2>
+  <table>
+    <tr><th style="width:15%;">Symbol</th><th>Meaning</th></tr>
+    <tr><td>&Sigma;</td><td>Input alphabet (the set of symbols the automaton reads; ASCII bytes 0x00&ndash;0x7F in this project)</td></tr>
+    <tr><td>Q</td><td>Finite set of states of an automaton</td></tr>
+    <tr><td>q<sub>0</sub></td><td>Start (initial) state, q<sub>0</sub> &isin; Q</td></tr>
+    <tr><td>F</td><td>Set of accepting (final) states, F &sube; Q</td></tr>
+    <tr><td>&delta;</td><td>Transition function, &delta;: Q &times; &Sigma; &rarr; Q (DFA) or Q &times; (&Sigma; &cup; {&epsilon;}) &rarr; 2<sup>Q</sup> (NFA)</td></tr>
+    <tr><td>&epsilon;</td><td>The empty string; also labels a "no input consumed" transition in an NFA</td></tr>
+    <tr><td>L(M)</td><td>The language (set of accepted strings) recognized by automaton M</td></tr>
+    <tr><td>|Q|</td><td>Number of states (state count)</td></tr>
+    <tr><td>2<sup>|Q|</sup></td><td>Powerset ceiling &ndash; the theoretical maximum number of DFA states subset construction could produce from an NFA of |Q| states</td></tr>
+    <tr><td>O(&middot;)</td><td>Big-O asymptotic time/space complexity notation</td></tr>
+    <tr><td>&perp;</td><td>The rejecting sink (dead) state shown by the visualizer when a DFA/min-DFA transition is missing</td></tr>
+  </table>
+</section>
+
+<!-- =============== ABSTRACT =============== -->
+<section class="frontpage page-start">
+  <h2 class="section center">ABSTRACT</h2>
+  <p id="abstract-text">Most programmers use a regular expression every week and never see what actually happens underneath it. That gap is exactly what RegexLab sets out to close. It is a hand-built, dependency-free regular expression engine that compiles a pattern through a visible, step-by-step pipeline rather than hiding everything behind a single match or no-match answer. A pattern is parsed into an abstract syntax tree, turned into a nondeterministic finite automaton by Thompson's construction, determinized into a DFA by subset construction, and reduced to its unique minimal form by Moore's algorithm, and every one of those intermediate structures is kept around and shown to the learner, not discarded once the final answer is ready.</p>
+  <p>We built the engine twice on purpose. A TypeScript version came first and still lives in the repository as the design-validation prototype, while the production engine is written in C++20 and compiled to WebAssembly so it runs directly in the browser. Both versions are checked against two independent, well-trusted reference engines, native C++'s <code>std::regex</code> and JavaScript's built-in <code>RegExp</code>, across thousands of randomly generated patterns and inputs. A real bug would have to slip past both languages and both test frameworks at once to go unnoticed, which is a much stronger bar than trusting either engine alone. On top of that core pipeline we added two features that go beyond the standard construction: a Subset Growth / NFA Structure Lab that reports raw, reachable, and minimized state counts alongside the theoretical powerset ceiling, and a Bounded Optimization Explorer that searches a strictly bounded space of epsilon-edge deletions on the Thompson NFA and proves, by product-construction equivalence checking, which ones are safe. Every candidate it cannot prove safe comes with a concrete witness string showing exactly where the language changed, and when a configured resource limit is hit before a proof completes, it says "inconclusive" instead of guessing.</p>
+  <p>This report walks through the system's architecture, maps it onto the compiler-design syllabus (lexical analysis through the indirect regex-to-DFA route, syntax analysis through a hand-written recursive-descent parser, code generation through the matcher and the WebAssembly build, DFA minimization standing in for the optimization phase), and lays out its resource-safety guards on pattern length, nesting depth, NFA state count, and minimization work. It documents the automated test results, 209 Vitest cases across 20 files and 81 native C++ Catch2 cases totalling 4,923 assertions, all passing, and a real regression we found and fixed while reviewing the project's own pull request history: a minimization-pass bug that had quietly dropped an alphabet-compression optimization and wrongly rejected a perfectly legal pattern as too complex, along with the timing evidence confirming the fix. We are just as upfront about what the project does not do. Only the indirect route to a DFA is implemented, not the direct method. Only Moore's minimization is implemented, not Hopcroft's. Matching is full-string only, the alphabet is ASCII only, and the bounded optimizer gives a verified-safe reduction within its search bound, not a provably minimum-size NFA.</p>
+  <p class="wordcount">(Word count: 495 words)</p>
+</section>
+
+<!-- =============== CHAPTER 1 =============== -->
+<section class="page-start" id="ch1">
+  <h1 class="chapter">CHAPTER 1<br>INTRODUCTION</h1>
+
+  <h2 class="section">1.1 Background</h2>
+  <p>A regular expression engine is one of the most heavily used pieces of compiler technology that a working programmer never actually sees the inside of. It is also, conveniently, the worked example that the course's prescribed textbook uses to introduce lexical analysis: Aho, Lam, Sethi and Ullman's <span class="bold">Compilers: Principles, Techniques, and Tools</span> (2nd ed.) walks through turning a regular expression into a syntax tree, the syntax tree into a nondeterministic finite automaton (NFA) by Thompson's construction, the NFA into a deterministic finite automaton (DFA) by subset construction (independently described by Rabin and Scott), and finally reducing that DFA to its unique minimal form by a state-equivalence algorithm such as Moore's or Hopcroft's. RegexLab builds exactly this pipeline by hand, with no regular-expression library and no automata-theory package anywhere in the engine, and keeps every intermediate structure visible to whoever is using it.</p>
+
+  <h2 class="section">1.2 Motivations</h2>
+  <p>Three things pulled us toward this project. The first was simply wanting to see automata theory move: it is normally taught on paper, with small NFAs and DFAs drawn by hand, and we wanted a tool that performs the same constructions on real input and lets a learner step through them the way a debugger steps through code. The second was correctness as a discipline in its own right. Building the same algorithms twice, once in TypeScript and once in C++, and checking both against independent reference engines turned the project into a genuine exercise in differential testing, not just parsing. The third, said plainly, was that this project gave us something concrete to point to. "Implemented Thompson's construction, subset construction, and Moore's minimization from scratch" is a claim we can actually back up line by line in the code, and the WebAssembly compilation step is a second, literal code-generation stage on top of the first.</p>
+
+  <h2 class="section">1.3 Scope</h2>
+  <p>In scope: a hand-written recursive-descent parser for an extended regular-expression grammar, covering literal characters with backslash escaping, concatenation, alternation, the Kleene star, one-or-more and zero-or-one quantifiers, parenthesised grouping, character classes, the wildcard <code>.</code>, and the shorthand classes <code>\d</code>, <code>\w</code>, <code>\s</code> and their negations. Also in scope: Thompson's construction, subset construction, Moore's DFA minimization, a DFA-driven matcher, a hand-rolled SVG automaton visualizer with step-by-step playback, a Subset Growth / NFA Structure Lab that exposes structural automaton measurements, and a Bounded Optimization Explorer that searches a strictly bounded space of epsilon-edge deletions and verifies every candidate's language equivalence.</p>
+  <p>Out of scope, and left out on purpose rather than forgotten: the direct DFA-construction method (nullable, firstpos, lastpos, followpos), Hopcroft's faster minimization algorithm, substring or partial matching, and backreferences or lookahead/lookbehind, since both of the last two break the regular-language guarantee the whole project rests on. We have also been careful never to describe the bounded optimizer as finding a provably minimum-size NFA. What it finds is a verified-safe reduction within its configured search bound, and that distinction matters.</p>
+</section>
+
+<!-- =============== CHAPTER 2 =============== -->
+<section class="page-start" id="ch2">
+  <h1 class="chapter">CHAPTER 2<br>PROJECT DESCRIPTION AND GOALS</h1>
+
+  <h2 class="section">2.1 Literature Review</h2>
+  <p>This project rests on a handful of classical results. Kleene's characterization of regular languages is made constructive by <span class="bold">Thompson's construction</span> [1], which builds an NFA from a regular expression in time linear in the expression's size using a small set of fixed per-operator wiring rules. <span class="bold">Rabin and Scott</span> [2] gave the subset-construction algorithm that determinizes any NFA into an equivalent DFA, at the cost of a worst-case exponential blow-up in state count. We say that plainly in this report rather than quietly stepping around it. <span class="bold">Moore</span> [3] gave an iterative partition-refinement algorithm for collapsing a DFA to its unique minimal form, and <span class="bold">Hopcroft</span> [4] later improved on it asymptotically, O(n&middot;log n&middot;k) instead of Moore's O(n&sup2;&middot;k), by always refining from the smaller half of a split. That last sentence is a fact about the literature, not a claim about this project: <span class="bold">RegexLab implements Moore's algorithm only</span> (see &sect;5.2 and &sect;8), and Hopcroft's was deliberately left out. <span class="bold">Aho, Lam, Sethi and Ullman</span> [5] is the textbook that frames all of this as the worked example for a course's lexical-analysis module, and it is the explicit syllabus anchor behind this project's design.</p>
+  <p>Outside the purely theoretical line, <span class="bold">Cox</span> [6] explains from an engineering angle why real-world regex libraries built on backtracking search can blow up to exponential time on adversarial input, and makes the case for automaton-based matching, the approach this project takes, as the principled way around that problem. More recent work keeps pushing on how hard these constructions really are. <span class="bold">Baburin and Cotterell</span> [7] show that estimating how much subset construction's exponential blow-up will actually cost is itself PSPACE-hard, which is a sharper and more recent version of exactly the honesty this report tries to practise around &sect;2.1's own exponential-blow-up admission. <span class="bold">Jiang and Ravikumar</span> [8] prove that finding a minimum-size NFA for a given regular language is PSPACE-complete, and <span class="bold">Clemente and Mayr</span> [9] give practical algorithms for reducing an NFA's size while provably preserving its language, which is the same safety guarantee the Bounded Optimization Explorer (&sect;2.3, &sect;7.3) is built around, just at a scale this project's bounded search does not attempt. These sources place the project's algorithms in context; we are not claiming RegexLab contributes a new result to that literature.</p>
+
+  <h2 class="section">2.2 Research Gap</h2>
+  <p>To our knowledge, and we have looked, we have not found an openly built, dependency-free, two-language regular-expression compiler pipeline that is built specifically for teaching in the way RegexLab is: one that exposes every pass's intermediate output to an interactive visualizer and also includes a bounded, verified NFA-structure optimizer that hands back a concrete counterexample whenever it proves a simplification unsafe. Most teaching implementations of these algorithms that we came across are standalone scripts or notebook exercises that produce one final diagram and stop there, not a tested, dual-implementation, browser-deployed pipeline with an automated and safety-verified optimization step built in.</p>
+
+  <h2 class="section">2.3 Objectives</h2>
+  <p>We set out with six concrete goals. Implement Thompson's construction, subset construction, and Moore's minimization from scratch, with no automata or regex library, in two independent language implementations. Validate both implementations by differential testing against independent reference engines. Expose every pass's output through an interactive, hand-rolled SVG visualizer. Add a bounded, formally-verified NFA-structure exploration feature, the Bounded Optimization Explorer, that never reports a false "safe" simplification. Compile the production engine to WebAssembly and verify its resource guards directly in a real browser build. And document the project's syllabus mapping, complexity analysis, and limitations honestly, including the parts where the mapping is thin.</p>
+
+  <h2 class="section">2.4 Problem Statement</h2>
+  <p>Given a regular expression from the supported extended grammar and a candidate input string, the engine has two jobs. First, decide whether the input belongs to the language the expression describes, using only hand-built automata-theoretic machinery and within explicit, enforced bounds on pattern length, nesting depth, NFA state count, and minimization work. Second, given a bounded set of structural simplifications to the expression's Thompson NFA (specifically, epsilon-edge deletions), decide whether each one preserves the recognized language exactly. That second answer has to come from product-construction equivalence checking, not from a heuristic or from sampling, and whenever the answer is no, the engine has to produce a concrete, shortest distinguishing input.</p>
+
+  <h2 class="section">2.5 Project Plan</h2>
+  <p>We planned the project in phases and tracked progress against a living checklist in our own internal working-agreement document. The Core phase covered literal characters, concatenation, alternation, the Kleene star, grouping, the full five-pass pipeline in both languages, golden-value and differential tests, the WebAssembly binding, the visualizer, and Moore's minimization. Stretch A added the <code>+</code> and <code>?</code> quantifiers, and Stretch B added <code>[a&ndash;z]</code>-style character classes. A Hard Stretch tier, Hopcroft's minimization and isomorphism-based equivalence testing, was explicitly locked and never started, since we had agreed it would only be worth attempting once both of us could explain the simpler Moore's-algorithm version from memory, unaided. The Subset Growth / NFA Structure Lab and the Bounded Optimization Explorer came later, as a deliberately scoped addition once the Core was already working end to end.</p>
+</section>
+
+<!-- =============== CHAPTER 3 =============== -->
+<section class="page-start" id="ch3">
+  <h1 class="chapter">CHAPTER 3<br>TECHNICAL SPECIFICATION</h1>
+
+  <h2 class="section">3.1 Functional and Non-functional Requirements</h2>
+  <div class="tbl-caption">Table 3.1 &ndash; Functional requirements</div>
+  <table>
+    <tr><th>ID</th><th>Requirement</th></tr>
+    <tr><td>FR1</td><td>Parse a supported extended regular-expression grammar into an abstract syntax tree, reporting a structured, positioned error for any invalid pattern.</td></tr>
+    <tr><td>FR2</td><td>Construct an NFA from the AST using Thompson's construction.</td></tr>
+    <tr><td>FR3</td><td>Construct a DFA from the NFA using subset construction.</td></tr>
+    <tr><td>FR4</td><td>Minimize the DFA using Moore's partition-refinement algorithm.</td></tr>
+    <tr><td>FR5</td><td>Match a given input string against the minimized DFA and produce a step-by-step trace.</td></tr>
+    <tr><td>FR6</td><td>Render the AST, NFA, DFA, and minimized DFA as an SVG graph with playback controls.</td></tr>
+    <tr><td>FR7</td><td>Report structural automaton measurements (raw/reachable/minimized state counts, powerset ceiling).</td></tr>
+    <tr><td>FR8</td><td>Search a bounded space of epsilon-edge-deletion candidates on the NFA and verify each candidate's language equivalence against the baseline, reporting a distinguishing witness for every unsafe candidate.</td></tr>
+  </table>
+
+  <div class="tbl-caption">Table 3.2 &ndash; Non-functional requirements</div>
+  <table>
+    <tr><th>ID</th><th>Requirement</th></tr>
+    <tr><td>NFR1</td><td>Zero regular-expression or automata-theory runtime dependencies in the engine itself.</td></tr>
+    <tr><td>NFR2</td><td>Every resource-intensive pass (Thompson's construction, subset construction, minimization) must fail fast with a typed error rather than hang, once an explicit, documented budget is exceeded.</td></tr>
+    <tr><td>NFR3</td><td>The production engine must run client-side in a browser via WebAssembly, with no server-side regex evaluation.</td></tr>
+    <tr><td>NFR4</td><td>Both language implementations (TypeScript, C++) must be validated against independent reference engines by differential testing.</td></tr>
+  </table>
+
+  <h2 class="section">3.2 Feasibility Study</h2>
+  <p><span class="bold">Technical feasibility:</span> every algorithm we used (Thompson's construction, subset construction, Moore's minimization, product-construction equivalence checking) is well-documented and textbook-level, so there was no open research risk. The one real technical risk we ran into was unbounded recursion and state growth on adversarial input, and we closed it with explicit guards on pattern length, nesting depth, NFA state count, and minimization work.</p>
+  <p><span class="bold">Economic feasibility:</span> the whole toolchain is free and open source: GCC/Clang, CMake, Node.js, TypeScript, Vitest, Catch2, Emscripten, React, and Vite. The project carries no licensing cost at all (see Table 7.4).</p>
+  <p><span class="bold">Social feasibility:</span> this is a self-contained teaching tool. It collects no personal data, tracks nothing, and does not depend on any paid external service for its core engine. The only optional piece that would reach outside the browser is an AI-assisted suggestion layer, which is still only planned and not required for the core pipeline to work, and even that is designed so any suggestion it makes has to pass back through the same hand-built parser before a user ever sees it.</p>
+
+  <h2 class="section">3.3 Hardware and Software Specification</h2>
+  <div class="tbl-caption">Table 3.3 &ndash; Hardware and software specification</div>
+  <table>
+    <tr><th style="width:30%;">Category</th><th>Specification</th></tr>
+    <tr><td>Development hardware</td><td>Any x86-64 machine capable of running Node.js and a C++20 compiler; no GPU or specialised hardware required.</td></tr>
+    <tr><td>Operating system (development)</td><td>Windows 11 with a WSL2 Ubuntu environment (as used for this report's own verification run); Linux and macOS are equally supported.</td></tr>
+    <tr><td>Core engine language</td><td>C++20 (production, compiled to WebAssembly via Emscripten) and TypeScript (strict mode, prototype/design-validation implementation).</td></tr>
+    <tr><td>Build tooling</td><td>CMake &ge; 3.16, a C++20-capable compiler (GCC 15.2 used for this report's verification build), Node.js 22, npm.</td></tr>
+    <tr><td>Test tooling</td><td>Vitest (TypeScript), Catch2 v3 (C++, fetched via CMake FetchContent).</td></tr>
+    <tr><td>Frontend</td><td>React, Vite, TypeScript, hand-rolled SVG (no charting/graph library).</td></tr>
+    <tr><td>Deployment target</td><td>Any modern browser capable of running a WebAssembly module (Emscripten <code>MODULARIZE</code>/<code>EXPORT_ES6</code> build).</td></tr>
+  </table>
+</section>
+
+<!-- =============== CHAPTER 4 =============== -->
+<section class="page-start" id="ch4">
+  <h1 class="chapter">CHAPTER 4<br>DESIGN APPROACH AND DETAILS</h1>
+
+  <h2 class="section">4.1 System Architecture</h2>
+  <p>The system is organised into three strictly decoupled layers (Figure 4.1). The <span class="bold">Core Engine</span> is a pure pass pipeline: a pattern and an input string go in, structured JSON comes out, and it has no idea a UI or an AI layer even exists. The <span class="bold">Visualization Layer</span> is a pure function of the engine's own output, with no logic of its own. The <span class="bold">Suggestion Layer</span> is optional and separately gated: it only switches on when parsing fails, and any candidate fix it proposes has to pass back through the same hand-built parser before it is ever shown to a user.</p>
+  <div class="fig-box">
+  <svg width="620" height="230" viewBox="0 0 620 230" xmlns="http://www.w3.org/2000/svg">
+    <rect x="20" y="15" width="580" height="55" fill="none" stroke="black"/>
+    <text x="310" y="37" text-anchor="middle" font-size="12">Presentation Layer (React UI: pattern input, test-string input, playback controls)</text>
+    <text x="310" y="55" text-anchor="middle" font-size="11" font-style="italic">frontend/src/App.tsx</text>
+    <line x1="150" y1="70" x2="150" y2="90" stroke="black" marker-end="url(#a)"/>
+    <line x1="470" y1="70" x2="470" y2="90" stroke="black" marker-end="url(#a)"/>
+    <rect x="20" y="95" width="260" height="55" fill="none" stroke="black"/>
+    <text x="150" y="117" text-anchor="middle" font-size="13">Visualization Layer</text>
+    <text x="150" y="134" text-anchor="middle" font-size="10.5" font-style="italic">AutomatonView.tsx (pure fn of engine state)</text>
+    <rect x="340" y="95" width="260" height="55" fill="none" stroke="black"/>
+    <text x="470" y="117" text-anchor="middle" font-size="13">Suggestion Layer (planned)</text>
+    <text x="470" y="134" text-anchor="middle" font-size="10.5" font-style="italic">re-parsed before shown</text>
+    <line x1="150" y1="150" x2="150" y2="170" stroke="black" marker-end="url(#a)"/>
+    <line x1="470" y1="150" x2="470" y2="170" stroke="black" marker-end="url(#a)" stroke-dasharray="4,3"/>
+    <line x1="470" y1="170" x2="280" y2="195" stroke="black" marker-end="url(#a)" stroke-dasharray="4,3"/>
+    <rect x="20" y="175" width="260" height="50" fill="none" stroke="black"/>
+    <text x="150" y="196" text-anchor="middle" font-size="13">Core Engine &ndash; Pass Pipeline</text>
+    <text x="150" y="213" text-anchor="middle" font-size="10.5" font-style="italic">Parser &rarr; Thompson &rarr; Subset &rarr; Minimize &rarr; Matcher</text>
+    <defs><marker id="a" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>
+  </svg>
+  </div>
+  <div class="fig-caption">Figure 4.1 &ndash; System architecture (layered)</div>
+
+  <h2 class="section">4.2 Data Flow, Use Case, Class and Sequence Diagrams</h2>
+  <div class="fig-box">
+  <svg width="700" height="150" viewBox="0 0 700 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="55" width="100" height="40" fill="none" stroke="black"/><text x="60" y="79" text-anchor="middle" font-size="12">pattern, input</text>
+    <line x1="110" y1="75" x2="140" y2="75" stroke="black" marker-end="url(#b)"/>
+    <ellipse cx="185" cy="75" rx="55" ry="25" fill="none" stroke="black"/><text x="185" y="79" text-anchor="middle" font-size="11">ParserPass</text>
+    <line x1="240" y1="75" x2="275" y2="75" stroke="black" marker-end="url(#b)"/>
+    <ellipse cx="380" cy="75" rx="95" ry="30" fill="none" stroke="black"/>
+    <text x="380" y="71" text-anchor="middle" font-size="10.5">Thompson + Subset</text>
+    <text x="380" y="85" text-anchor="middle" font-size="10.5">Construction + Minimize</text>
+    <line x1="475" y1="75" x2="510" y2="75" stroke="black" marker-end="url(#b)"/>
+    <ellipse cx="590" cy="75" rx="55" ry="25" fill="none" stroke="black"/><text x="590" y="79" text-anchor="middle" font-size="11">MatcherPass</text>
+    <line x1="645" y1="75" x2="665" y2="75" stroke="black" marker-end="url(#b)"/>
+    <rect x="665" y="55" width="15" height="40" fill="none" stroke="black"/>
+    <text x="672" y="45" text-anchor="middle" font-size="10">UI</text>
+    <defs><marker id="b" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>
+  </svg>
+  </div>
+  <div class="fig-caption">Figure 4.2 &ndash; Data flow diagram (Level 1)</div>
+
+  <div class="fig-box">
+  <svg width="500" height="200" viewBox="0 0 500 200" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="60" cy="40" r="14" fill="none" stroke="black"/><line x1="60" y1="54" x2="60" y2="100" stroke="black"/>
+    <line x1="35" y1="70" x2="85" y2="70" stroke="black"/><line x1="60" y1="100" x2="35" y2="140" stroke="black"/><line x1="60" y1="100" x2="85" y2="140" stroke="black"/>
+    <text x="60" y="160" text-anchor="middle" font-size="11">Learner</text>
+    <ellipse cx="230" cy="30" rx="90" ry="20" fill="none" stroke="black"/><text x="230" y="34" text-anchor="middle" font-size="11">Compile pattern</text>
+    <ellipse cx="230" cy="80" rx="90" ry="20" fill="none" stroke="black"/><text x="230" y="84" text-anchor="middle" font-size="11">Step through match trace</text>
+    <ellipse cx="230" cy="130" rx="90" ry="20" fill="none" stroke="black"/><text x="230" y="134" text-anchor="middle" font-size="11">Inspect growth metrics</text>
+    <ellipse cx="230" cy="180" rx="90" ry="20" fill="none" stroke="black"/><text x="230" y="184" text-anchor="middle" font-size="11">Run bounded optimizer</text>
+    <line x1="100" y1="90" x2="140" y2="30" stroke="black"/>
+    <line x1="100" y1="90" x2="140" y2="80" stroke="black"/>
+    <line x1="100" y1="90" x2="140" y2="130" stroke="black"/>
+    <line x1="100" y1="90" x2="140" y2="180" stroke="black"/>
+  </svg>
+  </div>
+  <div class="fig-caption">Figure 4.3 &ndash; Use case diagram</div>
+
+  <div class="fig-box">
+  <svg width="620" height="260" viewBox="0 0 620 260" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="10" width="160" height="90" fill="none" stroke="black"/>
+    <text x="90" y="26" text-anchor="middle" font-size="12" font-weight="bold">ASTNode</text>
+    <line x1="10" y1="32" x2="170" y2="32" stroke="black"/>
+    <text x="16" y="48" font-size="10">kind: char|concat|alt|star|</text>
+    <text x="16" y="60" font-size="10">plus|optional|charset</text>
+    <text x="16" y="76" font-size="10">left, right, child: ASTNode</text>
+    <rect x="220" y="10" width="170" height="100" fill="none" stroke="black"/>
+    <text x="305" y="26" text-anchor="middle" font-size="12" font-weight="bold">Automaton</text>
+    <line x1="220" y1="32" x2="390" y2="32" stroke="black"/>
+    <text x="226" y="48" font-size="10">stateCount: number</text>
+    <text x="226" y="60" font-size="10">startState: number</text>
+    <text x="226" y="72" font-size="10">acceptStates: number[]</text>
+    <text x="226" y="84" font-size="10">transitions: Map&lt;id,Map&gt;</text>
+    <rect x="440" y="10" width="170" height="70" fill="none" stroke="black"/>
+    <text x="525" y="26" text-anchor="middle" font-size="12" font-weight="bold">ParseError</text>
+    <line x1="440" y1="32" x2="610" y2="32" stroke="black"/>
+    <text x="446" y="48" font-size="10">type, position: number</text>
+    <text x="446" y="60" font-size="10">expected, found: string?</text>
+    <rect x="220" y="150" width="170" height="90" fill="none" stroke="black"/>
+    <text x="305" y="166" text-anchor="middle" font-size="12" font-weight="bold">MatchTrace</text>
+    <line x1="220" y1="172" x2="390" y2="172" stroke="black"/>
+    <text x="226" y="188" font-size="10">steps: MatchStep[]</text>
+    <text x="226" y="200" font-size="10">result: match|no-match</text>
+    <text x="226" y="212" font-size="10">failurePosition: number?</text>
+    <rect x="440" y="150" width="170" height="90" fill="none" stroke="black"/>
+    <text x="525" y="166" text-anchor="middle" font-size="12" font-weight="bold">PipelineResult</text>
+    <line x1="440" y1="172" x2="610" y2="172" stroke="black"/>
+    <text x="446" y="188" font-size="10">ok: boolean</text>
+    <text x="446" y="200" font-size="10">ast,nfa,dfa,minDfa,trace</text>
+    <text x="446" y="212" font-size="10">error: ParseError</text>
+    <line x1="305" y1="110" x2="305" y2="150" stroke="black" marker-end="url(#c)"/>
+    <line x1="390" y1="195" x2="440" y2="195" stroke="black" marker-end="url(#c)"/>
+    <line x1="525" y1="150" x2="525" y2="80" stroke="black" marker-end="url(#c)" stroke-dasharray="3,2"/>
+    <defs><marker id="c" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>
+  </svg>
+  </div>
+  <div class="fig-caption">Figure 4.4 &ndash; Class diagram of the core data contracts (field names verified against <code>engine/include/regexlab/types.hpp</code> and <code>frontend/src/types/engine.ts</code>)</div>
+
+  <div class="fig-box">
+  <svg width="680" height="230" viewBox="0 0 680 230" xmlns="http://www.w3.org/2000/svg">
+    <text x="60" y="20" text-anchor="middle" font-size="11" font-weight="bold">UI</text>
+    <text x="220" y="20" text-anchor="middle" font-size="11" font-weight="bold">runPipeline()</text>
+    <text x="400" y="20" text-anchor="middle" font-size="11" font-weight="bold">ParserPass</text>
+    <text x="610" y="15" text-anchor="middle" font-size="10.5" font-weight="bold">Thompson/Subset/</text>
+    <text x="610" y="27" text-anchor="middle" font-size="10.5" font-weight="bold">Minimize/MatcherPass</text>
+    <line x1="60" y1="30" x2="60" y2="210" stroke="black" stroke-dasharray="2,2"/>
+    <line x1="220" y1="30" x2="220" y2="210" stroke="black" stroke-dasharray="2,2"/>
+    <line x1="400" y1="30" x2="400" y2="210" stroke="black" stroke-dasharray="2,2"/>
+    <line x1="610" y1="30" x2="610" y2="210" stroke="black" stroke-dasharray="2,2"/>
+    <line x1="60" y1="50" x2="220" y2="50" stroke="black" marker-end="url(#d)"/><text x="130" y="45" font-size="9" text-anchor="middle">pattern, input</text>
+    <line x1="220" y1="70" x2="400" y2="70" stroke="black" marker-end="url(#d)"/><text x="310" y="65" font-size="9" text-anchor="middle">parse(pattern)</text>
+    <line x1="400" y1="100" x2="220" y2="100" stroke="black" marker-end="url(#d)" stroke-dasharray="4,2"/><text x="310" y="95" font-size="9" text-anchor="middle">ParseResult{ok, ast | error}</text>
+    <line x1="220" y1="120" x2="610" y2="120" stroke="black" marker-end="url(#d)"/><text x="415" y="115" font-size="9" text-anchor="middle">if ok: thompson &rarr; subset &rarr; minimize &rarr; match</text>
+    <line x1="610" y1="150" x2="220" y2="150" stroke="black" marker-end="url(#d)" stroke-dasharray="4,2"/><text x="415" y="145" font-size="9" text-anchor="middle">nfa, dfa, minDfa, trace (or AutomatonTooComplexError)</text>
+    <line x1="220" y1="180" x2="60" y2="180" stroke="black" marker-end="url(#d)" stroke-dasharray="4,2"/><text x="130" y="175" font-size="9" text-anchor="middle">PipelineResult (JSON)</text>
+    <defs><marker id="d" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>
+  </svg>
+  </div>
+  <div class="fig-caption">Figure 4.5 &ndash; Sequence diagram for one compile-and-match request (<code>engine/pipeline.cpp:runPipeline</code>)</div>
+</section>
+
+<!-- =============== CHAPTER 5 =============== -->
+<section class="page-start" id="ch5">
+  <h1 class="chapter">CHAPTER 5<br>METHODOLOGY AND TESTING</h1>
+
+  <h2 class="section">5.1 Module description, per pass</h2>
+  <div class="tbl-caption">Table 5.1 &ndash; Module description per compiler pass</div>
+  <table>
+    <tr><th>Pass</th><th>Algorithm</th><th>Input &rarr; Output</th><th>Source files</th></tr>
+    <tr><td>ParserPass</td><td>Hand-written recursive descent (precedence by call-chain: regex &rarr; term &rarr; factor &rarr; atom)</td><td>pattern string &rarr; AST or ParseError</td><td><code>engine/passes/parser-pass.ts</code>, <code>.cpp</code></td></tr>
+    <tr><td>ThompsonPass</td><td>Thompson's construction [1]</td><td>AST &rarr; NFA</td><td><code>engine/passes/thompson-pass.ts</code>, <code>.cpp</code></td></tr>
+    <tr><td>SubsetConstructionPass</td><td>Subset/powerset construction [2], worklist-framed</td><td>NFA &rarr; DFA</td><td><code>engine/passes/subset-construction-pass.ts</code>, <code>.cpp</code></td></tr>
+    <tr><td>MinimizationPass</td><td>Moore's algorithm [3] (partition refinement), with alphabet equivalence-class compression</td><td>DFA &rarr; minimal DFA</td><td><code>engine/passes/minimization-pass.ts</code>, <code>.cpp</code></td></tr>
+    <tr><td>MatcherPass</td><td>Direct DFA simulation</td><td>minimal DFA, input string &rarr; MatchTrace</td><td><code>engine/passes/matcher-pass.ts</code>, <code>.cpp</code></td></tr>
+  </table>
+  <p>Worth stating plainly: the five passes are plain functions chained together by <code>pipeline.cpp</code>, not instances of some shared <code>Pass&lt;In,Out&gt;</code> interface. An early design sketch floated that kind of interface, but the shipped code never ended up using it, and we would rather say so than describe the code as more abstract than it actually is.</p>
+  <div class="fig-box">
+  <svg width="700" height="140" viewBox="0 0 700 140" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="50" width="100" height="40" fill="none" stroke="black"/><text x="60" y="68" text-anchor="middle" font-size="11">(a|b)*abb</text><text x="60" y="82" text-anchor="middle" font-size="9" font-style="italic">pattern</text>
+    <line x1="110" y1="70" x2="145" y2="70" stroke="black" marker-end="url(#e)"/>
+    <ellipse cx="195" cy="70" rx="50" ry="27" fill="none" stroke="black"/><text x="195" y="67" text-anchor="middle" font-size="11">AST</text><text x="195" y="80" text-anchor="middle" font-size="9" font-style="italic">ParserPass</text>
+    <line x1="245" y1="70" x2="280" y2="70" stroke="black" marker-end="url(#e)"/>
+    <ellipse cx="335" cy="70" rx="55" ry="27" fill="none" stroke="black"/><text x="335" y="67" text-anchor="middle" font-size="11">NFA: 14</text><text x="335" y="80" text-anchor="middle" font-size="9" font-style="italic">Thompson</text>
+    <line x1="390" y1="70" x2="425" y2="70" stroke="black" marker-end="url(#e)"/>
+    <ellipse cx="480" cy="70" rx="55" ry="27" fill="none" stroke="black"/><text x="480" y="67" text-anchor="middle" font-size="11">DFA: 5</text><text x="480" y="80" text-anchor="middle" font-size="9" font-style="italic">Subset constr.</text>
+    <line x1="535" y1="70" x2="570" y2="70" stroke="black" marker-end="url(#e)"/>
+    <ellipse cx="630" cy="70" rx="55" ry="27" fill="none" stroke="black"/><text x="630" y="67" text-anchor="middle" font-size="11">min-DFA: 4</text><text x="630" y="80" text-anchor="middle" font-size="9" font-style="italic">Moore's</text>
+    <defs><marker id="e" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>
+  </svg>
+  </div>
+  <div class="fig-caption">Figure 5.1 &ndash; Pass pipeline for pattern <code>(a|b)*abb</code>, with the actual state counts from Table 7.1</div>
+
+  <h2 class="section">5.2 Complexity and resource guards</h2>
+  <div class="tbl-caption">Table 5.2 &ndash; Complexity of each pass (n = DFA/NFA state count as noted, k = alphabet size, m = NFA state count)</div>
+  <table>
+    <tr><th>Stage</th><th>Time</th><th>Space</th><th>Note</th></tr>
+    <tr><td>Parsing</td><td>O(n)</td><td>O(n)</td><td>n = pattern length</td></tr>
+    <tr><td>Thompson's construction</td><td>O(n)</td><td>O(n)</td><td>linear in AST size; a saturating state-count estimate is checked before allocation</td></tr>
+    <tr><td>Subset construction</td><td>O(2<sup>m</sup>) worst case</td><td>O(2<sup>m</sup>) worst case</td><td>the exponential blow-up is named, not hidden</td></tr>
+    <tr><td>Minimization (Moore's)</td><td>O(n&sup2;&middot;k)</td><td>O(n&middot;k)</td><td>k measured after alphabet equivalence-class compression; see &sect;7.2 for a regression found and fixed in this project's own review process</td></tr>
+    <tr><td>Matching</td><td>O(n) per string</td><td>O(1) active state</td><td>why DFA matching avoids the exponential worst case of naive backtracking engines [6]</td></tr>
+  </table>
+
+  <div class="tbl-caption">Table 5.3 &ndash; Input guards (verified directly against the source)</div>
+  <table>
+    <tr><th>Guard</th><th>Value</th><th>Behaviour</th></tr>
+    <tr><td>Pattern length</td><td>500 characters</td><td><code>PatternTooComplex</code> at position 500, over an all-ASCII prefix</td></tr>
+    <tr><td>Nesting depth</td><td>1000 levels of <code>(</code></td><td><code>PatternTooComplex</code> at position 1000; mathematically unreachable under the 500-char cap, kept as defense in depth</td></tr>
+    <tr><td>Thompson NFA size</td><td>2,048 states</td><td><code>AutomatonTooComplexError</code> before allocation, via a saturating state-count estimate</td></tr>
+    <tr><td>Minimization input size</td><td>20,000 DFA states (default)</td><td>a cheap up-front size check, before any alphabet work begins</td></tr>
+    <tr><td>Minimization work</td><td>5,000,000 work units (default)</td><td>computed as state-count&sup2; &times; alphabet size, measured <span class="bold">after</span> alphabet equivalence-class compression</td></tr>
+    <tr><td>Alphabet</td><td>ASCII only</td><td>a non-ASCII byte in the pattern is an <code>UnexpectedToken</code> at its own position</td></tr>
+  </table>
+
+  <h2 class="section">5.3 Testing strategy</h2>
+  <p>Testing happens in layers. Golden-value unit tests cover each pass individually, ported one-to-one between the two languages. A pipeline-equivalence test confirms that calling the chained pipeline gives the same result as manually chaining the five passes yourself. Differential testing runs the C++ engine against <code>std::regex</code> and the TypeScript engine against native, anchored <code>RegExp</code> over thousands of randomly generated pattern-and-input pairs. The C++ build compiles with strict warnings (<code>-Wall -Wextra</code>) enabled. We also practise mutation discipline: deliberately break something, confirm the relevant test actually goes red, then revert it, so we know the tests are testing something real. And every resource guard has its own test that configures a deliberately tiny budget to confirm the guard actually fires rather than silently doing nothing.</p>
+  <div class="tbl-caption">Table 5.4 &ndash; Automated test results (this report's own verification run, PR&nbsp;#72 head plus a local minimization-pass fix &ndash; see &sect;7.2)</div>
+  <table>
+    <tr><th>Suite</th><th>Result</th></tr>
+    <tr><td>TypeScript strict typecheck (<code>tsc --noEmit</code>)</td><td>Passed, zero errors</td></tr>
+    <tr><td>Vitest</td><td>209 tests passed across 20 test files, 0 failed</td></tr>
+    <tr><td>Native C++ Catch2 suite (Release build, <code>engine_tests</code>)</td><td>81 test cases passed, 4,923 assertions passed, 0 failed</td></tr>
+    <tr><td>Frontend production build (<code>npm --prefix frontend run build</code>)</td><td>Passed &ndash; 263.84 kB JS (82.01 kB gzip), 18.46 kB CSS (4.23 kB gzip)</td></tr>
+  </table>
+  <div class="tbl-caption">Table 5.4b &ndash; Compiled-WebAssembly limit-probe suite (<code>scripts/check-wasm-limits.mjs</code>), rebuilt WASM module (Emscripten 6.0.11, Release)</div>
+  <table>
+    <tr><th>Result</th><th>Value</th></tr>
+    <tr><td>Probes passed</td><td>31 / 31</td></tr>
+    <tr><td>Acceptance / pattern-length-cap / nested-plus / nesting-depth / non-ASCII / length-parity probes</td><td>27 (unchanged from the pre-fix tree)</td></tr>
+    <tr><td>Restored timed stress probes (&sect;7.2 fix)</td><td>4, all passing well under their time budgets</td></tr>
+  </table>
+  <p class="small">The WASM target was rebuilt from source (Emscripten 6.0.11, Release) and <code>scripts/check-wasm-limits.mjs</code> was run against the fresh module for this report: <span class="bold">31/31 probes passed</span>, including the three previously-regressed stress probes and this PR's own nested-plus guard probes. See Table 7.2 for the individual stress-probe timings.</p>
+</section>
+
+<!-- =============== CHAPTER 6 =============== -->
+<section class="page-start" id="ch6">
+  <h1 class="chapter">CHAPTER 6<br>PROJECT DEMONSTRATION</h1>
+  <p>A typical walkthrough starts with a learner typing in a pattern, say <code>(a|b)*abb</code>, and a test string, say <code>ababb</code>. The engine parses the pattern into an AST, builds the 14-state Thompson NFA, determinizes it into a 5-state DFA, minimizes that down to a 4-state DFA by Moore's algorithm, and runs the test string through it, producing a step-by-step trace that ends in acceptance (these exact numbers are verified in Table 7.1, not approximated). The visualizer draws the AST, NFA, DFA, and minimized DFA as SVG graphs with playback controls that light up the active state or states as each character is consumed. If a character has nowhere to go in the DFA or minimized DFA view, the visualizer shows an explicit rejecting sink state and highlights the character that failed. The NFA view is left without a fabricated sink on purpose, since a real NFA has partial transitions by nature and inventing a sink there would misrepresent it.</p>
+  <p>A second walkthrough shows the Subset Growth / NFA Structure Lab. For a given pattern, the panel reports the raw NFA state count, how many states subset construction actually reaches, and the minimized DFA's state count, side by side with the theoretical powerset ceiling of 2<sup>|Q|</sup>. Seeing the gap between that ceiling and what actually gets built is, in our experience, the moment this kind of theory stops being abstract.</p>
+  <p>A third walkthrough runs the Bounded Optimization Explorer. Given an NFA, it enumerates candidate epsilon-edge deletions up to a configured edit depth, checks each one against the baseline NFA for language equivalence using a product-construction procedure, and labels every candidate either equivalent, meaning it is safe to apply and lands on the verified Pareto frontier if it is also not dominated on size, or different, with a concrete shortest string that the baseline accepts and the candidate rejects (or the other way around). Table 7.3 shows one verified example of each kind, computed directly by the engine, not written up from memory.</p>
+  <p class="small"><span class="todo">Note:</span> we have not yet captured live browser screenshots of this walkthrough, for the reason already given in the List of Figures. The counts and examples above come straight from running the compiled engine against the exact patterns shown.</p>
+</section>
+
+<!-- =============== CHAPTER 7 =============== -->
+<section class="page-start" id="ch7">
+  <h1 class="chapter">CHAPTER 7<br>RESULT AND DISCUSSION</h1>
+
+  <h2 class="section">7.1 Pipeline state counts for representative patterns</h2>
+  <div class="tbl-caption">Table 7.1 &ndash; Pipeline state counts (produced by running the compiled native C++ engine directly)</div>
+  <table>
+    <tr><th>Pattern</th><th>NFA states</th><th>DFA states</th><th>Min-DFA states</th></tr>
+    <tr><td><code>(a|b)*abb</code></td><td>14</td><td>5</td><td>4</td></tr>
+    <tr><td><code>a+</code></td><td>5</td><td>3</td><td>2</td></tr>
+    <tr><td><code>a?</code></td><td>4</td><td>2</td><td>2</td></tr>
+    <tr><td><code>[a-c]+</code></td><td>5</td><td>3</td><td>2</td></tr>
+  </table>
+
+  <h2 class="section">7.2 A regression found and fixed during this review, with timing evidence</h2>
+  <p>While reviewing pull request #72, we found that its minimization pass had quietly lost an alphabet equivalence-class compression optimization that already exists on the project's main branch, added earlier for issue #64. In its place sat a flat 5,000,000-unit work budget checked against the <span class="bold">uncompressed</span> alphabet instead of the compressed one. In practice this meant a perfectly legal pattern, five hundred repetitions of the wildcard <code>.</code> sitting right at the 500-character length cap, got wrongly rejected as <code>AutomatonTooComplexError</code>. The wildcard's alphabet has 126 symbols, and left uncompressed that pushed the work estimate over budget, even though every one of those 126 symbols collapses into a single equivalence class once you actually compress them. We restored the compression step, which groups alphabet symbols by identical transition behaviour before the work estimate is computed, in both the TypeScript and the C++ minimization passes, and kept everything the pull request itself had added: the configurable <code>MinimizationLimits</code> parameter and the shared <code>AutomatonTooComplexError</code> type.</p>
+  <div class="tbl-caption">Table 7.2 &ndash; Minimization stress timings, native (non-WASM) Release build, this report's own measurements, 3 runs each</div>
+  <table>
+    <tr><th>Pattern</th><th>Min-DFA states</th><th>Run 1</th><th>Run 2</th><th>Run 3</th></tr>
+    <tr><td><code>.</code> &times; 500 (at the length cap)</td><td>501</td><td>104.4 ms</td><td>96.8 ms</td><td>96.6 ms</td></tr>
+    <tr><td><code>\w</code> &times; 250 (500 chars)</td><td>251</td><td>23.5 ms</td><td>21.5 ms</td><td>22.3 ms</td></tr>
+    <tr><td><code>[^a]</code> &times; 125 (500 chars)</td><td>126</td><td>13.9 ms</td><td>13.6 ms</td><td>12.8 ms</td></tr>
+  </table>
+  <div class="tbl-caption">Table 7.2b &ndash; Same three patterns through the rebuilt WASM module, one run each via <code>scripts/check-wasm-limits.mjs</code> (spawns a fresh Node child process and instantiates the module per probe, so these include process-startup and WASM-instantiation overhead that Table 7.2's native, in-process numbers do not)</div>
+  <table>
+    <tr><th>Pattern</th><th>Elapsed</th><th>Time budget</th><th>Result</th></tr>
+    <tr><td><code>.</code> &times; 500</td><td>426 ms</td><td>2000 ms</td><td>ok</td></tr>
+    <tr><td><code>\w</code> &times; 250</td><td>140 ms</td><td>1000 ms</td><td>ok</td></tr>
+    <tr><td><code>[^a]</code> &times; 125</td><td>141 ms</td><td>1000 ms</td><td>ok</td></tr>
+  </table>
+  <p class="small">Table 7.2's timings cover the full <code>runPipeline</code> call, parsing through matching, not minimization in isolation, so they are an upper bound on what minimization alone costs. All three patterns now complete successfully with no <code>AutomatonTooComplexError</code>; before the fix, the <code>.</code>&times;500 case was rejected outright. We are not claiming WebAssembly is faster or slower than native here. Table 7.2b's numbers include per-probe process-spawn and module-instantiation overhead that Table 7.2's in-process numbers do not, so the two are not directly comparable to each other, and neither is a benchmark claim on its own.</p>
+
+  <h2 class="section">7.3 Bounded-optimizer safe and unsafe deletion examples</h2>
+  <div class="tbl-caption">Table 7.3 &ndash; Bounded-optimizer safe vs. unsafe epsilon-deletion examples (computed directly by the engine)</div>
+  <table>
+    <tr><th>Pattern</th><th>Candidate edit</th><th>Equivalence result</th><th>Witness</th></tr>
+    <tr><td><code>a|a</code></td><td>Delete one of the two branch-entry epsilon edges (<code>delete-eps:1&gt;5</code>)</td><td><span class="bold">Equivalent (safe)</span></td><td>&mdash; (no distinguishing input exists; the other branch still reaches accept on <code>a</code>)</td></tr>
+    <tr><td><code>(a|b)*ab</code></td><td>Delete the epsilon edge feeding the mandatory trailing <code>a</code> (<code>delete-eps:7&gt;8</code>)</td><td><span class="bold">Different (unsafe)</span></td><td>Shortest witness: <code>"ab"</code> &ndash; baseline accepts, candidate rejects</td></tr>
+  </table>
+  <p>The safe example is a genuinely redundant structure. Thompson's construction for <code>a|a</code> builds two parallel branches that both recognize the literal string <code>a</code>, so deleting either branch's own entry edge into the shared accept state leaves the other branch perfectly intact and the language unchanged. The unsafe example is why the explorer has to verify every candidate instead of trusting a syntactic heuristic. That edge looks structurally similar to the redundant kind, but it actually sits on the only path into the mandatory trailing <code>a</code>, so deleting it removes acceptance of every string that needs that <code>a</code>. The explorer's product-construction equivalence check catches this and reports the shortest such string, <code>"ab"</code>, instead of simply saying "unsafe" and leaving the reader to take it on faith.</p>
+
+  <h2 class="section">7.4 Discrepancies against the project's own report-data file</h2>
+  <p>We checked the project repository's own <code>data_for_report.md</code> (dated 25 October 2026) against the numbers we derived independently for this report. The automated test counts (209 Vitest tests across 20 files, 81 Catch2 cases totalling 4,923 assertions) and the bounded-search default limits (12 eligible edges, edit depth 2, 24 candidates, 128 DFA states, 100,000 work units, 10,000 product-state pairs) matched exactly. That file records the compiled-WASM probe count as 27/27, which is what it was before we restored the four previously-deleted timed probes to <code>scripts/check-wasm-limits.mjs</code> as part of the &sect;7.2 fix. After that restoration and a full WASM rebuild, the real count is <span class="bold">31/31</span> (Table 5.4b): the original 27 unchanged plus the 4 we brought back. We also went further than the probe count and confirmed that the minimized-DFA JSON output, in both TypeScript and C++, is byte-identical to the project's <code>main</code> branch across the shared parser fixture's 24 valid patterns and 200 randomly generated valid patterns. In other words, the &sect;7.2 fix changes nothing about how any pattern that was already legal gets handled.</p>
+
+  <h2 class="section">7.5 Cost analysis</h2>
+  <div class="tbl-caption">Table 7.4 &ndash; Cost analysis (tooling)</div>
+  <table>
+    <tr><th>Tool</th><th>Licence</th><th>Cost</th></tr>
+    <tr><td>GCC / Clang, CMake</td><td>Open source (GPL/BSD-family)</td><td>&#8377;0</td></tr>
+    <tr><td>Node.js, npm, TypeScript</td><td>Open source (MIT)</td><td>&#8377;0</td></tr>
+    <tr><td>Vitest, Catch2</td><td>Open source (MIT/BSL)</td><td>&#8377;0</td></tr>
+    <tr><td>Emscripten</td><td>Open source (MIT/University of Illinois)</td><td>&#8377;0</td></tr>
+    <tr><td>React, Vite</td><td>Open source (MIT)</td><td>&#8377;0</td></tr>
+    <tr><td>Deployment (static hosting, e.g. GitHub Pages)</td><td>Free tier is sufficient; no server-side regex evaluation required</td><td>&#8377;0</td></tr>
+  </table>
+  <p>Every tool in the stack is free and open source, and the production engine runs entirely client-side as a static WebAssembly asset, so the project's total tooling and hosting cost comes to &#8377;0, not counting our own time.</p>
+</section>
+
+<!-- =============== CHAPTER 8 =============== -->
+<section class="page-start" id="ch8">
+  <h1 class="chapter">CHAPTER 8<br>CONCLUSION AND FUTURE WORK</h1>
+  <p>When we started, "implement a regex engine" sounded like a weekend project. It was not, and that turned out to be the point. RegexLab shows that the classical automata-theory pipeline named in a compiler-design syllabus, Thompson's construction, subset construction, and DFA minimization, can genuinely be built by hand, in two independent languages, checked by differential testing against industrial-strength reference engines, and shipped as an interactive browser tool, with a bounded and formally verified NFA-structure optimizer on top that never makes a false safety claim. We have tried throughout this report to be honest about where the syllabus coverage runs deep, lexical analysis through the indirect route, and where it stays thin, semantic analysis and parallelism, rather than stretching the project to look broader than it is.</p>
+  <p>The part of this work we are proudest of is not a feature, it is a process. While reviewing our own pull request history for this report, we found a real regression: a lost alphabet-compression optimization in the minimization pass that was quietly rejecting a pattern it had no business rejecting. Finding it was not luck. It came directly from the correctness strategy the project is built on, two independently maintained implementations and a complexity derivation we could actually check by hand, and that same strategy is what let us fix it and prove the fix with real timing evidence instead of just patching the symptom and hoping. That is, honestly, the most reassuring thing about the whole project: when something did go wrong, the project's own design caught it.</p>
+  <p>There is plenty we would still like to build. Hopcroft's O(n&middot;log n&middot;k) minimization alongside Moore's, with a test proving both produce the same minimized automaton. The direct DFA-construction method, nullable/firstpos/lastpos/followpos, as a second and independently verifiable route to the same DFA. An explicit DFA-state-count guard on subset construction, which today relies only on the indirect bound the pattern-length cap happens to provide. And the AI-assisted suggestion layer itself, whose one non-negotiable rule, that any AI-proposed fix has to be re-validated by the same hand-built parser before a user ever sees it, is already decided and written down even though the feature isn't built yet. None of this was rushed, and we would rather hand in a smaller project we can defend completely than a longer feature list we cannot.</p>
+</section>
+
+<!-- =============== CHAPTER 9 : REFERENCES =============== -->
+<section class="page-start" id="ch9">
+  <h1 class="chapter">CHAPTER 9<br>REFERENCES</h1>
+  <ol class="refs">
+    <li>K. Thompson, "Programming Techniques: Regular expression search algorithm," <i>Communications of the ACM</i>, vol. 11, no. 6, pp. 419&ndash;422, 1968.</li>
+    <li>M. O. Rabin and D. Scott, "Finite automata and their decision problems," <i>IBM Journal of Research and Development</i>, vol. 3, no. 2, pp. 114&ndash;125, 1959.</li>
+    <li>E. F. Moore, "Gedanken-experiments on sequential machines," in <i>Automata Studies</i>, Princeton University Press, 1956, pp. 129&ndash;153.</li>
+    <li>J. E. Hopcroft, "An n log n algorithm for minimizing states in a finite automaton," Stanford University, Computer Science Technical Report CS-TR-71-190, 1971.</li>
+    <li>A. V. Aho, M. S. Lam, R. Sethi, and J. D. Ullman, <i>Compilers: Principles, Techniques, and Tools</i>, 2nd ed. Boston, MA: Addison-Wesley, 2006.</li>
+    <li>R. Cox, "Regular Expression Matching Can Be Simple And Fast (but is slow in Java, Perl, PHP, Python, Ruby, ...)," swtch.com, Jan. 2007. [Online article].</li>
+    <li>I. Baburin and R. Cotterell, "A Close Analysis of the Subset Construction," <i>arXiv:2407.09891</i>, 2024.</li>
+    <li>T. Jiang and B. Ravikumar, "Minimal NFA problems are hard," <i>SIAM Journal on Computing</i>, vol. 22, no. 6, pp. 1117&ndash;1141, 1993.</li>
+    <li>L. Clemente and R. Mayr, "Efficient reduction of nondeterministic automata with application to language inclusion testing," <i>arXiv:1711.09946</i>, 2017.</li>
+  </ol>
+  <p class="small">Every reference above was checked directly against its source (publisher listing, arXiv abstract page, or SIGACT/SIAM record) while preparing this report, including the exact volume, issue, and page numbers. Two citations in an earlier draft of this report were wrong in a way worth naming honestly: [7] had been attributed to a different Baburin and Cotterell paper on Glushkov-style constructions, and [9] had been attributed to Holzer, Jakobi, and Kutrib's "Magic Number Problem" paper under the wrong arXiv identifier. Both are corrected above to the papers their cited identifiers actually point to.</p>
+</section>
+
+<!-- =============== APPENDIX A =============== -->
+<section class="page-start" id="appA">
+  <h1 class="chapter">APPENDIX A<br>SAMPLE CODE</h1>
+  <p>The extended grammar implemented by <code>ParserPass</code> is shown below. We verified it against the per-rule docblocks that actually sit above each parsing function in <code>engine/passes/parser-pass.cpp</code> (for example <code>/** regex ::= term ('|' term)* */</code> above <code>parseRegex()</code>, and <code>/** atom ::= ASCII_CHAR | '.' | '[' class ']' | '(' regex ')' | escape */</code> above <code>parseAtom()</code>), and separately against the grammar's own reference document, <code>docs/regex-grammar-v1.md</code>.</p>
+  <pre>regex          ::= term ('|' term)*
+term           ::= factor+
+factor         ::= atom quantifier?
+quantifier     ::= '*' | '+' | '?'
+atom           ::= CHAR | '.' | characterClass | '(' regex ')'
+characterClass ::= '[' '^'? classItem+ ']'
+classItem      ::= classAtom ('-' classAtom)?
+classAtom      ::= ASCII_LITERAL | ESCAPE | SHORTHAND   ( \d \w \s \D \W \S )</pre>
+  <p class="small">This is the full extended grammar from the issue #60/#64 follow-up, not the narrower Core-phase grammar (literal, concat, alt, star, parens only) that shipped first, as described in &sect;2.5. <code>+</code> and <code>?</code> are real postfix quantifiers that produce dedicated <code>PlusNode</code>/<code>OptionalNode</code> AST nodes, not literal characters, and <code>.</code>, character classes, and shorthand classes all desugar to a single <code>CharacterSetNode</code> Thompson fragment, which is what &sect;5.2's complexity note on alphabet size is referring to.</p>
+  <p>The restored alphabet equivalence-class compression step in <code>MinimizationPass</code> (TypeScript), central to the fix described in &sect;7.2, copied verbatim from <code>engine/passes/minimization-pass.ts</code>:</p>
+  <pre>function representativeAlphabetOf(dfa: Automaton, alphabet: string[], stateCount: number): string[] {
+  const classKeyOf = new Map&lt;string, string&gt;(); // symbol -> its class's key (the full transition column)
+  const seenKeys = new Set&lt;string&gt;();
+  const representatives: string[] = [];
+
+  for (const symbol of alphabet) {
+    const column: string[] = [];
+    for (let state = 0; state &lt; stateCount; state++) {
+      const dest = dfa.transitions.get(state)?.get(symbol)?.[0];
+      column.push(dest === undefined ? "-" : String(dest));
+    }
+    const key = column.join(",");
+    classKeyOf.set(symbol, key);
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      representatives.push(symbol);
+    }
+  }
+
+  return representatives;
+}</pre>
+  <p>The Thompson's-construction rule for alternation (TypeScript; C++ mirrors it exactly), copied verbatim from <code>engine/passes/thompson-pass.ts</code>:</p>
+  <pre>case "alt": {
+  const left = buildFragment(node.left, builder);
+  const right = buildFragment(node.right, builder);
+  const start = builder.newState();
+  const accept = builder.newState();
+  builder.addTransition(start, "eps", left.start);
+  builder.addTransition(start, "eps", right.start);
+  builder.addTransition(left.accept, "eps", accept);
+  builder.addTransition(right.accept, "eps", accept);
+  return { start, accept };
+}</pre>
+</section>
+
+</body>
+</html>
